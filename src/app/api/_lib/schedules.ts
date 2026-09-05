@@ -28,6 +28,21 @@ function dayIndex(day: string) {
   return dayNames.findIndex((name) => name.toLowerCase() === normalized);
 }
 
+/** Safely parse workingDays array, preventing JSON.parse syntax errors on malformed DB strings. */
+export function parseWorkingDays(raw: string): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(String);
+  } catch {
+    // Fallback for legacy comma-separated values like "1,2,3,4,5" or "Monday,Tuesday"
+  }
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 /**
  * Accepts either explicit per-day lines or the legacy
  * workingDays + startTime/endTime shorthand, and returns normalized lines.

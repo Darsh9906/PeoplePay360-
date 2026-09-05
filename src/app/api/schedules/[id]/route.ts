@@ -15,6 +15,7 @@ import {
 } from "../../_lib/responses";
 import {
   headerFromLines,
+  parseWorkingDays,
   resolveLines,
   scheduleSchema,
 } from "../../_lib/schedules";
@@ -45,7 +46,7 @@ export async function GET(_request: Request, ctx: Params) {
 
     return ok({
       ...schedule,
-      workingDays: JSON.parse(schedule.workingDays) as string[],
+      workingDays: parseWorkingDays(schedule.workingDays),
       lines: await loadLines(id),
     });
   } catch (error) {
@@ -120,7 +121,7 @@ export async function PATCH(request: Request, ctx: Params) {
 
     return ok({
       ...schedule,
-      workingDays: JSON.parse(schedule.workingDays) as string[],
+      workingDays: parseWorkingDays(schedule.workingDays),
       lines: await loadLines(id),
     });
   } catch (error) {
