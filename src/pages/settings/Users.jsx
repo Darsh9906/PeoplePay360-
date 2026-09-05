@@ -18,19 +18,8 @@ import {
 
 const roles = ["Admin", "HR Manager", "Payroll Manager", "Employee"]
 
-const employees = [
-  { id: "aarav-mehta", name: "Aarav Mehta", email: "aarav.mehta@peoplepay360.com" },
-  { id: "maya-shah", name: "Maya Shah", email: "maya.shah@peoplepay360.com" },
-  { id: "rohan-patel", name: "Rohan Patel", email: "rohan.patel@peoplepay360.com" },
-  { id: "nisha-rao", name: "Nisha Rao", email: "nisha.rao@peoplepay360.com" },
-]
-
-const initialUsers = [
-  { id: "usr-001", name: "Aarav Mehta", employee: "Aarav Mehta", email: "aarav.mehta@peoplepay360.com", role: "Admin", status: "Active" },
-  { id: "usr-002", name: "Maya Shah", employee: "Maya Shah", email: "maya.shah@peoplepay360.com", role: "HR Manager", status: "Active" },
-  { id: "usr-003", name: "Rohan Patel", employee: "Rohan Patel", email: "rohan.patel@peoplepay360.com", role: "Payroll Manager", status: "Active" },
-  { id: "usr-004", name: "Nisha Rao", employee: "Nisha Rao", email: "nisha.rao@peoplepay360.com", role: "Employee", status: "Inactive" },
-]
+const employees = []
+const initialUsers = []
 
 const emptyForm = { employee: "", email: "", role: "Employee", status: "Active" }
 
@@ -165,7 +154,7 @@ export default function Users() {
                       <TableCell className="text-right"><ChevronRight className="ml-auto h-4 w-4 text-zinc-400" /></TableCell>
                     </TableRow>
                   )) : (
-                    <TableRow className="border-zinc-200 hover:bg-white"><TableCell colSpan={6} className="h-52 text-center"><div className="flex flex-col items-center gap-2 text-zinc-500"><UserRound className="h-8 w-8 text-zinc-300" /><p className="font-medium text-black">No users found</p><p className="text-xs">Try changing your search or role filter.</p></div></TableCell></TableRow>
+                    <TableRow className="border-zinc-200 hover:bg-white"><TableCell colSpan={6} className="h-56 text-center"><div className="flex flex-col items-center justify-center space-y-2 py-6 text-zinc-500"><UserRound className="h-10 w-10 text-zinc-300" /><p className="text-base font-semibold text-black">No users found</p><p className="max-w-sm text-xs text-zinc-500">There are no user records to display. Use the &quot;New User&quot; button above to add a user.</p></div></TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
