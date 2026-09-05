@@ -43,6 +43,11 @@ export default function EmployeeList() {
   const [selectedDepartment, setSelectedDepartment] = useState("ALL")
   const [selectedStatus, setSelectedStatus] = useState("ALL")
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [customDepartments, setCustomDepartments] = useState<string[]>([])
+  const [isAddingDepartment, setIsAddingDepartment] = useState(false)
+  const [newDepartment, setNewDepartment] = useState("")
+
+  const departmentOptions = [...DEPARTMENTS, ...customDepartments]
 
   // Form State for Add Employee
   const [formData, setFormData] = useState({
@@ -141,6 +146,18 @@ export default function EmployeeList() {
       status: "Active",
     })
     setErrors({})
+    setIsAddingDepartment(false)
+    setNewDepartment("")
+  }
+
+  const addCustomDepartment = () => {
+    const department = newDepartment.trim()
+    if (!department || departmentOptions.includes(department)) return
+
+    setCustomDepartments((current) => [...current, department])
+    setFormData((current) => ({ ...current, department }))
+    setNewDepartment("")
+    setIsAddingDepartment(false)
   }
 
   return (
@@ -189,7 +206,7 @@ export default function EmployeeList() {
               className="w-40 bg-white border-zinc-300 text-black"
             >
               <option value="ALL">All Departments</option>
-              {DEPARTMENTS.map((dept) => (
+              {departmentOptions.map((dept) => (
                 <option key={dept} value={dept}>
                   {dept}
                 </option>
@@ -405,15 +422,37 @@ export default function EmployeeList() {
               <Select
                 name="department"
                 value={formData.department}
-                onChange={handleInputChange}
+                onChange={(event) => {
+                  if (event.target.value === "__add_custom__") {
+                    setIsAddingDepartment(true)
+                    setFormData((current) => ({ ...current, department: "" }))
+                  } else {
+                    handleInputChange(event)
+                  }
+                }}
                 className="border-zinc-300 text-black"
               >
-                {DEPARTMENTS.map((dept) => (
+                {departmentOptions.map((dept) => (
                   <option key={dept} value={dept}>
                     {dept}
                   </option>
                 ))}
+                <option value="__add_custom__">+ Add custom department</option>
               </Select>
+              {isAddingDepartment && (
+                <div className="flex gap-2">
+                  <Input
+                    autoFocus
+                    value={newDepartment}
+                    onChange={(event) => setNewDepartment(event.target.value)}
+                    placeholder="e.g. Customer Success"
+                    className="border-zinc-300"
+                  />
+                  <Button type="button" size="sm" onClick={addCustomDepartment}>
+                    Add
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5">

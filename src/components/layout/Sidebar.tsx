@@ -28,6 +28,8 @@ export default function Sidebar() {
     { label: "Employees", href: "/employees", icon: Users, badge: "HR Ops" },
     { label: "Contracts", href: "/contracts", icon: FileText, badge: "HR Ops" },
     { label: "Attendance", href: "/attendance", icon: Clock },
+    { label: "Time Off", href: "/timeoff", icon: Calendar },
+    { label: "Payroll", href: "#", icon: DollarSign, disabled: true },
     { label: "Time Off", href: "#", icon: Calendar, disabled: true },
     { label: "Payroll", href: "/payroll", icon: DollarSign },
     { label: "Schedules", href: "/schedules", icon: Briefcase },
