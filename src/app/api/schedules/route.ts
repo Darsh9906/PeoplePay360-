@@ -2,7 +2,12 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { workingScheduleLines, workingSchedules } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
-import { headerFromLines, resolveLines, scheduleSchema } from "../_lib/schedules";
+import {
+  headerFromLines,
+  parseWorkingDays,
+  resolveLines,
+  scheduleSchema,
+} from "../_lib/schedules";
 import { isResponse, resolveAccess } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
@@ -36,7 +41,7 @@ export async function GET() {
     return ok(
       rows.map((schedule) => ({
         ...schedule,
-        workingDays: JSON.parse(schedule.workingDays) as string[],
+        workingDays: parseWorkingDays(schedule.workingDays),
         lines: lines.filter((line) => line.scheduleId === schedule.id),
       })),
     );
@@ -95,7 +100,7 @@ export async function POST(request: Request) {
 
     return created({
       ...schedule,
-      workingDays: JSON.parse(schedule.workingDays) as string[],
+      workingDays: parseWorkingDays(schedule.workingDays),
       lines: savedLines,
     });
   } catch (error) {
