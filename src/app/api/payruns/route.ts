@@ -5,6 +5,7 @@ import {
   payruns,
   salaryStructures,
 } from "@/db/schema";
+import { isResponse, requireRole } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 type CreatePayrunBody = {
@@ -17,6 +18,12 @@ type CreatePayrunBody = {
 
 export async function GET() {
   try {
+    const actor = await requireRole(["payroll_user", "payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const rows = await db.query.payruns.findMany({
       with: {
         salaryStructure: true,
@@ -42,6 +49,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const actor = await requireRole(["payroll_user", "payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const body = (await request.json()) as CreatePayrunBody;
 
     if (!body.periodStart || !body.periodEnd) {

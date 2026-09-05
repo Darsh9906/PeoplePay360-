@@ -1,13 +1,17 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
   attendanceRecords,
   contracts,
   departments,
+  employeeWorkingSchedules,
   employees,
+  leaveAllocations,
   payslips,
   timeOffRequests,
+  timeOffTypes,
+  workingSchedules,
 } from "@/db/schema";
 import { writeAuditLog } from "../../_lib/audit";
 import { badRequest, noContent, notFound, ok, serverError } from "../../_lib/responses";
@@ -43,6 +47,10 @@ export async function GET(_request: Request, ctx: Params) {
         departmentId: employees.departmentId,
         department: departments.name,
         managerId: employees.managerId,
+        managerName: sql<string | null>`(
+          select concat(m.first_name, ' ', m.last_name)
+          from ${employees} m where m.id = ${employees.managerId}
+        )`,
       })
       .from(employees)
       .innerJoin(departments, eq(employees.departmentId, departments.id))
@@ -53,8 +61,14 @@ export async function GET(_request: Request, ctx: Params) {
       return notFound("Employee not found");
     }
 
-    const [employeeContracts, attendance, timeOff, employeePayslips] =
-      await Promise.all([
+    const [
+      employeeContracts,
+      attendance,
+      timeOff,
+      employeePayslips,
+      allocations,
+      schedules,
+    ] = await Promise.all([
         db
           .select()
           .from(contracts)
@@ -78,6 +92,41 @@ export async function GET(_request: Request, ctx: Params) {
           .where(and(eq(payslips.employeeId, id)))
           .orderBy(desc(payslips.id))
           .limit(10),
+        db
+          .select({
+            id: leaveAllocations.id,
+            timeOffTypeId: leaveAllocations.timeOffTypeId,
+            typeName: timeOffTypes.name,
+            colorHex: timeOffTypes.colorHex,
+            allocatedDays: leaveAllocations.allocatedDays,
+            consumedDays: leaveAllocations.consumedDays,
+            remainingDays: sql<string>`(${leaveAllocations.allocatedDays} - ${leaveAllocations.consumedDays})::text`,
+            status: leaveAllocations.status,
+            validFrom: leaveAllocations.validFrom,
+            validTo: leaveAllocations.validTo,
+          })
+          .from(leaveAllocations)
+          .innerJoin(
+            timeOffTypes,
+            eq(leaveAllocations.timeOffTypeId, timeOffTypes.id),
+          )
+          .where(eq(leaveAllocations.employeeId, id))
+          .orderBy(asc(timeOffTypes.name)),
+        db
+          .select({
+            id: workingSchedules.id,
+            name: workingSchedules.name,
+            weeklyHours: workingSchedules.weeklyHours,
+            effectiveFrom: employeeWorkingSchedules.effectiveFrom,
+            effectiveTo: employeeWorkingSchedules.effectiveTo,
+          })
+          .from(employeeWorkingSchedules)
+          .innerJoin(
+            workingSchedules,
+            eq(employeeWorkingSchedules.scheduleId, workingSchedules.id),
+          )
+          .where(eq(employeeWorkingSchedules.employeeId, id))
+          .orderBy(desc(employeeWorkingSchedules.effectiveFrom)),
       ]);
 
     return ok({
@@ -87,6 +136,9 @@ export async function GET(_request: Request, ctx: Params) {
       attendance,
       timeOff,
       payslips: employeePayslips,
+      allocations,
+      schedules,
+      workingSchedule: schedules[0] ?? null,
     });
   } catch (error) {
     return serverError(error);

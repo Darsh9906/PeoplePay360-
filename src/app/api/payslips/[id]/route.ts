@@ -8,12 +8,24 @@ import {
   payslipLines,
   payslips,
 } from "@/db/schema";
-import { notFound, ok, serverError } from "../../_lib/responses";
+import { isResponse, resolveAccess } from "../../_lib/access";
+import {
+  forbidden,
+  notFound,
+  ok,
+  serverError,
+} from "../../_lib/responses";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, ctx: Params) {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const { id } = await ctx.params;
 
     const [payslip] = await db
@@ -47,6 +59,11 @@ export async function GET(_request: Request, ctx: Params) {
 
     if (!payslip) {
       return notFound("Payslip not found");
+    }
+
+    // Employees may only open their own payslip.
+    if (access.scopeEmployeeId && payslip.employeeId !== access.scopeEmployeeId) {
+      return forbidden("You can only view your own payslip");
     }
 
     const lines = await db

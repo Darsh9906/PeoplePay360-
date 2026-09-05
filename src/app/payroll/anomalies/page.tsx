@@ -1,4 +1,4 @@
-import AnomalyDetection from "@/src/pages/payroll/AnomalyDetection"
+import AnomalyDetection from "@/src/views/payroll/AnomalyDetection"
 
 export default function AnomalyDetectionPage() {
   return <AnomalyDetection />

@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import Employee360 from "@/src/pages/employees/details/Employee360"
+import Employee360 from "@/src/views/employees/details/Employee360"
 
 export default function EmployeeDetailsPage() {
   return (

@@ -1,4 +1,4 @@
-import Users from "@/src/pages/settings/Users"
+import Users from "@/src/views/settings/Users"
 
 export default function UsersPage() {
   return <Users />

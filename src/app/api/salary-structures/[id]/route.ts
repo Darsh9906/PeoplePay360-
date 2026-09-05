@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { salaryStructures } from "@/db/schema";
 import { writeAuditLog } from "../../_lib/audit";
+import { isResponse, requireRole } from "../../_lib/access";
 import { badRequest, noContent, notFound, ok, serverError } from "../../_lib/responses";
 
 type Params = { params: Promise<{ id: string }> };
@@ -33,6 +34,12 @@ export async function GET(_request: Request, ctx: Params) {
 
 export async function PATCH(request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
     const parsed = updateSalaryStructureSchema.safeParse(await request.json());
 
@@ -65,6 +72,12 @@ export async function PATCH(request: Request, ctx: Params) {
 
 export async function DELETE(_request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
     await db.delete(salaryStructures).where(eq(salaryStructures.id, id));
     await writeAuditLog({

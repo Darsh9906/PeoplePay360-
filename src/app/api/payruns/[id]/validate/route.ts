@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { payruns } from "@/db/schema";
 import { writeAuditLog } from "../../../_lib/audit";
+import { isResponse, requireRole } from "../../../_lib/access";
 import { badRequest, notFound, ok, serverError } from "../../../_lib/responses";
 
 type Params = { params: Promise<{ id: string }> };
@@ -13,6 +14,15 @@ const validateSchema = z.object({
 
 export async function POST(request: Request, ctx: Params) {
   try {
+    const actor = await requireRole([
+      "payroll_user",
+      "payroll_manager",
+      "admin",
+    ]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
     const { id } = await ctx.params;
     const parsed = validateSchema.safeParse(await request.json().catch(() => ({})));
 

@@ -1,19 +1,9 @@
-import { asc } from "drizzle-orm";
-import { z } from "zod";
+import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { workingSchedules } from "@/db/schema";
+import { workingScheduleLines, workingSchedules } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
+import { headerFromLines, resolveLines, scheduleSchema } from "../_lib/schedules";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
-
-const scheduleSchema = z.object({
-  name: z.string().min(1),
-  workingDays: z.array(z.string().min(1)).min(1),
-  startTime: z.string().min(5).max(5),
-  endTime: z.string().min(5).max(5),
-  breakDurationMinutes: z.coerce.number().int().min(0).default(0),
-  timezone: z.string().min(1).default("Asia/Kolkata"),
-  status: z.enum(["active", "inactive"]).default("active"),
-});
 
 export async function GET() {
   try {
@@ -22,10 +12,24 @@ export async function GET() {
       .from(workingSchedules)
       .orderBy(asc(workingSchedules.name));
 
+    const lines = rows.length
+      ? await db
+          .select()
+          .from(workingScheduleLines)
+          .where(
+            inArray(
+              workingScheduleLines.scheduleId,
+              rows.map((row) => row.id),
+            ),
+          )
+          .orderBy(asc(workingScheduleLines.dayOfWeek))
+      : [];
+
     return ok(
       rows.map((schedule) => ({
         ...schedule,
         workingDays: JSON.parse(schedule.workingDays) as string[],
+        lines: lines.filter((line) => line.scheduleId === schedule.id),
       })),
     );
   } catch (error) {
@@ -41,13 +45,25 @@ export async function POST(request: Request) {
       return badRequest(parsed.error.issues[0]?.message ?? "Invalid request");
     }
 
+    const lines = resolveLines(parsed.data);
+
+    if (lines.length === 0) {
+      return badRequest("A schedule needs at least one working day");
+    }
+
     const [schedule] = await db
       .insert(workingSchedules)
       .values({
-        ...parsed.data,
-        workingDays: JSON.stringify(parsed.data.workingDays),
+        name: parsed.data.name,
+        timezone: parsed.data.timezone,
+        status: parsed.data.status,
+        ...headerFromLines(lines),
       })
       .returning();
+
+    await db.insert(workingScheduleLines).values(
+      lines.map((line) => ({ ...line, scheduleId: schedule.id })),
+    );
 
     await writeAuditLog({
       action: "create",
@@ -56,9 +72,16 @@ export async function POST(request: Request) {
       summary: `Created working schedule ${schedule.name}`,
     });
 
+    const savedLines = await db
+      .select()
+      .from(workingScheduleLines)
+      .where(eq(workingScheduleLines.scheduleId, schedule.id))
+      .orderBy(asc(workingScheduleLines.dayOfWeek));
+
     return created({
       ...schedule,
       workingDays: JSON.parse(schedule.workingDays) as string[],
+      lines: savedLines,
     });
   } catch (error) {
     return serverError(error);

@@ -4,9 +4,12 @@ import { db } from "@/db";
 import {
   contracts,
   departments,
+  employeeWorkingSchedules,
   employees,
   salaryStructures,
+  workingSchedules,
 } from "@/db/schema";
+import { scheduleTypeLabel } from "@/lib/schedule/hours";
 import { writeAuditLog } from "../../_lib/audit";
 import { badRequest, noContent, notFound, ok, serverError } from "../../_lib/responses";
 
@@ -50,6 +53,8 @@ export async function GET(_request: Request, ctx: Params) {
         currency: contracts.currency,
         salaryStructureId: contracts.salaryStructureId,
         salaryStructure: salaryStructures.name,
+        scheduleName: workingSchedules.name,
+        weeklyHours: workingSchedules.weeklyHours,
       })
       .from(contracts)
       .innerJoin(employees, eq(contracts.employeeId, employees.id))
@@ -57,6 +62,14 @@ export async function GET(_request: Request, ctx: Params) {
       .leftJoin(
         salaryStructures,
         eq(contracts.salaryStructureId, salaryStructures.id),
+      )
+      .leftJoin(
+        employeeWorkingSchedules,
+        eq(employeeWorkingSchedules.employeeId, contracts.employeeId),
+      )
+      .leftJoin(
+        workingSchedules,
+        eq(workingSchedules.id, employeeWorkingSchedules.scheduleId),
       )
       .where(eq(contracts.id, id))
       .limit(1);
@@ -69,9 +82,10 @@ export async function GET(_request: Request, ctx: Params) {
 
     return ok({
       ...contract,
-      contractType: "Full Time",
+      // Derived from the employee's assigned schedule, not assumed.
+      contractType: scheduleTypeLabel(Number(contract.weeklyHours)),
       salary: Number(contract.monthlyWage),
-      workingSchedule: "Standard 40h/week",
+      workingSchedule: contract.scheduleName ?? "No schedule assigned",
       endDate: contract.endDate ?? "Ongoing",
       displayStatus: getDisplayStatus(contract.status),
     });

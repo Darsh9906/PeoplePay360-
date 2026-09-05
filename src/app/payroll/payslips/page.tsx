@@ -1,4 +1,4 @@
-import Payslips from "@/src/pages/payroll/Payslips"
+import Payslips from "@/src/views/payroll/Payslips"
 
 export default function PayslipsPage() {
   return <Payslips />
