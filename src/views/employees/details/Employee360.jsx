@@ -14,6 +14,7 @@ import {
   UserRound,
   WalletCards,
   Wallet,
+  Save,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -187,6 +188,9 @@ export default function Employee360() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
   const [activeTab, setActiveTab] = useState("Overview")
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState(null)
+  const [saveError, setSaveError] = useState("")
 
   useEffect(() => {
     if (!id) return
@@ -255,18 +259,39 @@ export default function Employee360() {
 
   const employeeName = employee.fullName ?? `${employee.firstName} ${employee.lastName}`
 
+  const openRelated = (path, view) => router.push(`${path}?employeeId=${employee.id}${view ? `&view=${view}` : ""}`)
+
+  const startEditing = () => {
+    setSaveError("")
+    setEditForm({ employeeCode: employee.employeeCode, firstName: employee.firstName, lastName: employee.lastName, workEmail: employee.workEmail, jobTitle: employee.jobTitle, hireDate: employee.hireDate, status: employee.status })
+    setIsEditing(true)
+  }
+
+  const saveEmployee = async (event) => {
+    event.preventDefault()
+    setSaveError("")
+    try {
+      const response = await fetch(`/api/employees/${employee.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editForm) })
+      if (!response.ok) throw new Error("Unable to save employee")
+      const payload = await response.json()
+      setEmployee((current) => ({ ...current, ...payload.data, fullName: `${payload.data.firstName} ${payload.data.lastName}` }))
+      setIsEditing(false)
+    } catch (error) { setSaveError(error instanceof Error ? error.message : "Unable to save employee") }
+  }
+
   return (
     <main className="space-y-6">
       <header className="flex flex-col gap-4 border-b border-zinc-300 pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-black text-lg font-semibold text-white">{initials(employeeName)}</div><div><div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold tracking-tight text-black">{employeeName}</h1><Badge variant={statusVariant(employee.status)}>{formatStatus(employee.status)}</Badge></div><p className="mt-1 text-sm text-zinc-600">{employee.jobTitle} - {employee.department}</p><p className="mt-2 text-xs font-mono text-zinc-500">{employee.employeeCode}</p></div></div>
-        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => router.push("/employees")}><ArrowLeft className="h-4 w-4" /> Back to Employees</Button><Button><Pencil className="h-4 w-4" /> Edit Employee</Button></div>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => router.push("/employees")}><ArrowLeft className="h-4 w-4" /> Back to Employees</Button><Button onClick={startEditing}><Pencil className="h-4 w-4" /> Edit Employee</Button></div>
       </header>
 
       <Card className="border-zinc-300 bg-white shadow-sm"><CardHeader className="border-b border-zinc-200 p-5"><h2 className="font-semibold text-black">Personal Information</h2></CardHeader><CardContent className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-3"><div className="flex gap-3"><UserRound className="mt-0.5 h-4 w-4 text-zinc-400" /><div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Employee ID</p><p className="mt-1 text-sm font-medium text-black">{employee.employeeCode}</p></div></div><div className="flex gap-3"><Mail className="mt-0.5 h-4 w-4 text-zinc-400" /><div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Email</p><a className="mt-1 block text-sm font-medium text-black hover:underline" href={`mailto:${employee.workEmail}`}>{employee.workEmail}</a></div></div><div className="flex gap-3"><Phone className="mt-0.5 h-4 w-4 text-zinc-400" /><div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Phone</p><p className="mt-1 text-sm font-medium text-black">Not available</p></div></div><div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Department</p><p className="mt-1 text-sm font-medium text-black">{employee.department}</p></div><div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Manager</p><p className="mt-1 text-sm font-medium text-black">Not assigned</p></div><div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Joining Date</p><p className="mt-1 text-sm font-medium text-black">{formatDate(employee.hireDate)}</p></div></CardContent></Card>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{summary.map(({ label, value, icon: Icon }) => <Card key={label} className="border-zinc-300 bg-white shadow-sm"><CardContent className="flex items-center justify-between p-5"><div><p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p><p className="mt-2 text-2xl font-semibold text-black">{value}</p></div><Icon className="h-5 w-5 text-zinc-400" /></CardContent></Card>)}</section>
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{summary.slice(0, 4).map(({ label, value, icon: Icon }) => <button type="button" key={label} onClick={() => openRelated(label === "Contracts" ? "/contracts" : label === "Attendance" ? "/attendance" : "/timeoff", label === "Allocations" ? "allocations" : "requests")} className="text-left"><Card className="h-full border-zinc-300 bg-white shadow-sm transition hover:border-zinc-500"><CardContent className="flex items-center justify-between p-5"><div><p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p><p className="mt-2 text-2xl font-semibold text-black">{value}</p></div><Icon className="h-5 w-5 text-zinc-400" /></CardContent></Card></button>)}</section>
 
       <section className="space-y-4"><div className="flex gap-1 overflow-x-auto border-b border-zinc-300">{tabs.map((tab) => <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`whitespace-nowrap border-b-2 px-4 py-3 text-xs font-semibold transition ${activeTab === tab ? "border-black text-black" : "border-transparent text-zinc-500 hover:text-black"}`}>{tab}</button>)}</div>{activeTab === "Overview" && <OverviewTab employee={employee} />}{activeTab === "Contracts" && <ContractsTab contracts={employee.contracts} />}{activeTab === "Attendance" && <AttendanceTab attendance={employee.attendance} />}{activeTab === "Time Off" && <TimeOffTab timeOff={employee.timeOff} />}{activeTab === "Allocations" && <AllocationsTab allocations={employee.allocations} />}{activeTab === "Payslips" && <PayslipsTab payslips={employee.payslips} />}</section>
+      {isEditing && <Card className="border-zinc-300 bg-white shadow-sm"><CardHeader className="border-b border-zinc-200 p-5"><h2 className="font-semibold text-black">Edit Employee</h2></CardHeader><CardContent className="p-5"><form onSubmit={saveEmployee} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[["firstName","First name"],["lastName","Last name"],["workEmail","Work email"],["jobTitle","Job position"],["hireDate","Joining date"]].map(([name, label]) => <label key={name} className="space-y-1 text-xs font-semibold text-zinc-600">{label}<input required value={editForm[name]} type={name === "hireDate" ? "date" : name === "workEmail" ? "email" : "text"} onChange={(event) => setEditForm({ ...editForm, [name]: event.target.value })} className="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm font-normal text-black" /></label>)}<label className="space-y-1 text-xs font-semibold text-zinc-600">Status<select value={editForm.status} onChange={(event) => setEditForm({ ...editForm, status: event.target.value })} className="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm font-normal text-black"><option value="active">Active</option><option value="inactive">Inactive</option><option value="terminated">Terminated</option></select></label>{saveError && <p className="text-sm text-red-700 sm:col-span-2 lg:col-span-3">{saveError}</p>}<div className="flex gap-2 sm:col-span-2 lg:col-span-3"><Button type="submit"><Save className="h-4 w-4" />Save changes</Button><Button type="button" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button></div></form></CardContent></Card>}
     </main>
   )
 }

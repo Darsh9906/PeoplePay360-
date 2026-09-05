@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/src/context/AuthContext"
 import Allocations from "./Allocations"
 import Requests from "./Requests"
@@ -16,7 +17,10 @@ type TabKey = (typeof tabs)[number]["key"]
 
 export default function TimeOff() {
   const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState<TabKey>("requests")
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    searchParams.get("view") === "allocations" ? "allocations" : "requests",
+  )
 
   // Allocations and policy configuration belong to HR, not self-service.
   const visibleTabs = useMemo(

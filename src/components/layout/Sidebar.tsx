@@ -13,7 +13,6 @@ import {
   Clock,
   DollarSign,
   Briefcase,
-  Settings,
   ChevronLeft,
   ChevronRight,
   Shield,
@@ -35,7 +34,6 @@ export default function Sidebar() {
     { label: "Payroll", href: "/payroll", icon: DollarSign },
     { label: "Schedules", href: "/schedules", icon: Briefcase },
     { label: "User Management", href: "/users", icon: Users },
-    { label: "Settings", href: "#", icon: Settings, disabled: true },
   ]
 
   return (
@@ -71,34 +69,12 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {navItems.filter((item) => item.disabled || canAccessPath(item.href, user?.role)).map((item) => {
+        {navItems.filter((item) => canAccessPath(item.href, user?.role)).map((item) => {
           const Icon = item.icon
           const isActive =
             item.href !== "#" &&
             (pathname === item.href ||
               (item.href !== "/" && pathname?.startsWith(item.href)))
-
-          if (item.disabled) {
-            return (
-              <div
-                key={item.label}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-xs font-medium text-zinc-600 cursor-not-allowed select-none ${
-                  !sidebarOpen && "justify-center px-0"
-                }`}
-                title={`${item.label} (Out of scope)`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {sidebarOpen && (
-                  <div className="flex-1 flex items-center justify-between">
-                    <span>{item.label}</span>
-                    <span className="text-[10px] bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 rounded-sm text-zinc-500">
-                      Soon
-                    </span>
-                  </div>
-                )}
-              </div>
-            )
-          }
 
           return (
             <Link

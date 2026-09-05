@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import Link from "next/link"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import * as XLSX from "xlsx"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -29,9 +30,14 @@ import {
   Search,
   Filter,
   XCircle,
-  Mail,
   LayoutGrid,
   List as ListIcon,
+  Upload,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react"
 import EmployeeKanban from "./EmployeeKanban"
 
@@ -43,13 +49,44 @@ type EmployeeApiRow = {
   workEmail: string
   jobTitle: string
   status: "active" | "inactive" | "terminated"
+  hireDate: string
   department: string
+  managerName: string | null
+  scheduleName: string | null
 }
 
 type DepartmentApiRow = {
   id: string
   name: string
   code: string
+}
+
+type ImportRow = {
+  row: number
+  employeeCode: string
+  fullName: string
+  workEmail: string
+  department: string
+  jobTitle: string
+  hireDate: string
+  status: "active" | "inactive" | "terminated"
+  validation: string
+  valid: boolean
+}
+
+function parseCsv(text: string) {
+  return text.trim().split(/\r?\n/).map((line) => {
+    const values: string[] = []
+    let value = ""
+    let quoted = false
+    for (const character of line) {
+      if (character === '"') quoted = !quoted
+      else if (character === "," && !quoted) { values.push(value.trim()); value = "" }
+      else value += character
+    }
+    values.push(value.trim())
+    return values
+  })
 }
 
 function mapEmployeeFromApi(employee: EmployeeApiRow): Employee {
@@ -68,6 +105,9 @@ function mapEmployeeFromApi(employee: EmployeeApiRow): Employee {
     department: employee.department,
     position: employee.jobTitle,
     status: statusMap[employee.status],
+    hireDate: employee.hireDate,
+    managerName: employee.managerName,
+    scheduleName: employee.scheduleName,
   }
 }
 
@@ -81,6 +121,13 @@ export default function EmployeeList() {
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list")
   const [isAddingDepartment, setIsAddingDepartment] = useState(false)
   const [newDepartment, setNewDepartment] = useState("")
+  const [sortAscending, setSortAscending] = useState(true)
+  const [page, setPage] = useState(1)
+  const [isImportOpen, setIsImportOpen] = useState(false)
+  const [importRows, setImportRows] = useState<ImportRow[]>([])
+  const [importError, setImportError] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: number } | null>(null)
 
   const employeesQuery = useQuery({
     queryKey: ["employees"],
@@ -115,7 +162,7 @@ export default function EmployeeList() {
 
   // Combined Search & Filter logic
   const filteredEmployees = useMemo(() => {
-    return employees.filter((emp) => {
+    const filtered = employees.filter((emp) => {
       const fullName = `${emp.firstName} ${emp.lastName}`.toLowerCase()
       const searchLower = searchQuery.toLowerCase().trim()
       const matchesSearch =
@@ -123,7 +170,8 @@ export default function EmployeeList() {
         emp.firstName.toLowerCase().includes(searchLower) ||
         emp.lastName.toLowerCase().includes(searchLower) ||
         fullName.includes(searchLower) ||
-        emp.email.toLowerCase().includes(searchLower)
+        emp.email.toLowerCase().includes(searchLower) ||
+        emp.employeeCode?.toLowerCase().includes(searchLower)
 
       const matchesDepartment =
         selectedDepartment === "ALL" || emp.department === selectedDepartment
@@ -133,7 +181,15 @@ export default function EmployeeList() {
 
       return matchesSearch && matchesDepartment && matchesStatus
     })
-  }, [employees, searchQuery, selectedDepartment, selectedStatus])
+    return [...filtered].sort((a, b) => {
+      const result = `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+      return sortAscending ? result : -result
+    })
+  }, [employees, searchQuery, selectedDepartment, selectedStatus, sortAscending])
+
+  const pageSize = 12
+  const pageCount = Math.max(1, Math.ceil(filteredEmployees.length / pageSize))
+  const visibleEmployees = filteredEmployees.slice((page - 1) * pageSize, page * pageSize)
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -227,6 +283,85 @@ export default function EmployeeList() {
     setIsAddingDepartment(false)
   }
 
+  const downloadTemplate = () => {
+    const headers = ["Employee ID", "Full Name", "Work Email", "Phone", "Department", "Job Position", "Manager", "Joining Date", "Working Schedule", "Employment Status"]
+    const blob = new Blob([`${headers.join(",")}\n`], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = "peoplepay360-employee-template.csv"
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportFile = (file: File | undefined) => {
+    if (!file) return
+    setImportError("")
+    setImportResult(null)
+    if (!/\.(csv|xlsx)$/i.test(file.name)) {
+      setImportError("Please upload an Excel (.xlsx) or CSV file.")
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const workbook = file.name.toLowerCase().endsWith(".xlsx")
+        ? XLSX.read(reader.result, { type: "array" })
+        : null
+      const fileText = workbook
+        ? XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]])
+        : String(reader.result ?? "")
+      const [header, ...lines] = parseCsv(fileText)
+      const indexes = new Map(header.map((name, index) => [name.toLowerCase(), index]))
+      const valueAt = (values: string[], name: string) => values[indexes.get(name.toLowerCase()) ?? -1] ?? ""
+      const existingCodes = new Set(employees.map((employee) => employee.employeeCode?.toLowerCase()))
+      const existingEmails = new Set(employees.map((employee) => employee.email.toLowerCase()))
+      const seenCodes = new Set<string>()
+      const seenEmails = new Set<string>()
+      const rows = lines.filter((values) => values.some(Boolean)).map((values, index): ImportRow => {
+        const employeeCode = valueAt(values, "Employee ID")
+        const fullName = valueAt(values, "Full Name")
+        const workEmail = valueAt(values, "Work Email").toLowerCase()
+        const department = valueAt(values, "Department")
+        const jobTitle = valueAt(values, "Job Position")
+        const hireDate = valueAt(values, "Joining Date")
+        const rawStatus = valueAt(values, "Employment Status").toLowerCase()
+        const status = rawStatus === "inactive" || rawStatus === "terminated" ? rawStatus : "active"
+        const problems: string[] = []
+        if (!employeeCode) problems.push("Employee ID is required")
+        if (!fullName || fullName.trim().split(/\s+/).length < 2) problems.push("Full Name is required")
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(workEmail)) problems.push("Work Email is invalid")
+        if (!department || !departments.some((item) => item.name.toLowerCase() === department.toLowerCase())) problems.push("Department is invalid")
+        if (!jobTitle) problems.push("Job Position is required")
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(hireDate) || Number.isNaN(Date.parse(hireDate))) problems.push("Joining Date must be YYYY-MM-DD")
+        if (rawStatus && !["active", "inactive", "terminated"].includes(rawStatus)) problems.push("Employment Status is invalid")
+        if (existingCodes.has(employeeCode.toLowerCase()) || seenCodes.has(employeeCode.toLowerCase())) problems.push("Duplicate employee ID")
+        if (existingEmails.has(workEmail) || seenEmails.has(workEmail)) problems.push("Duplicate employee email")
+        seenCodes.add(employeeCode.toLowerCase()); seenEmails.add(workEmail)
+        return { row: index + 2, employeeCode, fullName, workEmail, department, jobTitle, hireDate, status, validation: problems.join("; ") || "Valid", valid: problems.length === 0 }
+      })
+      setImportRows(rows)
+    }
+    if (file.name.toLowerCase().endsWith(".xlsx")) reader.readAsArrayBuffer(file)
+    else reader.readAsText(file)
+  }
+
+  const runImport = async () => {
+    setImporting(true)
+    let imported = 0; let skipped = 0; let errors = 0
+    for (const row of importRows) {
+      if (!row.valid) { skipped += 1; continue }
+      const [firstName, ...rest] = row.fullName.trim().split(/\s+/)
+      const department = departments.find((item) => item.name.toLowerCase() === row.department.toLowerCase())
+      try {
+        await apiRequest("/api/employees", { method: "POST", body: JSON.stringify({ employeeCode: row.employeeCode, firstName, lastName: rest.join(" "), workEmail: row.workEmail, departmentId: department?.id, jobTitle: row.jobTitle, status: row.status, hireDate: row.hireDate }) })
+        imported += 1
+      } catch { errors += 1 }
+    }
+    setImportResult({ imported, skipped, errors })
+    setImporting(false)
+    await queryClient.invalidateQueries({ queryKey: ["employees"] })
+  }
+
   return (
     <div className="space-y-5">
       {/* Page Header */}
@@ -239,16 +374,10 @@ export default function EmployeeList() {
             Manage employee directory and department allocations.
           </p>
         </div>
-        <Button
-          onClick={() => {
-            resetForm()
-            setIsModalOpen(true)
-          }}
-          className="gap-1.5 self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" />
-          Add Employee
-        </Button>
+        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+          <Button variant="outline" onClick={() => setIsImportOpen(true)} className="gap-1.5"><Upload className="h-4 w-4" />Import Employees</Button>
+          <Button onClick={() => { resetForm(); setIsModalOpen(true) }} className="gap-1.5"><Plus className="h-4 w-4" />Add Employee</Button>
+        </div>
       </div>
 
       {/* Search & Filters Toolbar */}
@@ -336,6 +465,7 @@ export default function EmployeeList() {
               Kanban
             </button>
           </div>
+          <Button variant="outline" size="sm" onClick={() => { setSortAscending((value) => !value); setPage(1) }} className="gap-1.5"><ArrowUpDown className="h-3.5 w-3.5" />Name</Button>
         </div>
       </div>
 
@@ -348,16 +478,19 @@ export default function EmployeeList() {
           <TableHeader>
             <TableRow className="border-zinc-200 bg-zinc-50">
               <TableHead className="text-black font-semibold">Employee</TableHead>
-              <TableHead className="text-black font-semibold">Email</TableHead>
+              <TableHead className="hidden text-black font-semibold lg:table-cell">Job Position</TableHead>
               <TableHead className="text-black font-semibold">Department</TableHead>
-              <TableHead className="text-black font-semibold">Position</TableHead>
+              <TableHead className="hidden text-black font-semibold xl:table-cell">Manager</TableHead>
+              <TableHead className="hidden text-black font-semibold xl:table-cell">Schedule</TableHead>
+              <TableHead className="hidden text-black font-semibold md:table-cell">Joining Date</TableHead>
               <TableHead className="text-black font-semibold">Status</TableHead>
+              <TableHead className="text-right text-black font-semibold">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-40 text-center">
+                <TableCell colSpan={8} className="h-40 text-center">
                   <p className="text-sm font-medium text-zinc-500">
                     Loading employee records...
                   </p>
@@ -365,7 +498,7 @@ export default function EmployeeList() {
               </TableRow>
             ) : loadError ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-40 text-center">
+                <TableCell colSpan={8} className="h-40 text-center">
                   <div className="flex flex-col items-center justify-center text-zinc-500 space-y-2 py-6">
                     <XCircle className="h-10 w-10 text-zinc-300" />
                     <p className="text-base font-semibold text-black">
@@ -378,7 +511,7 @@ export default function EmployeeList() {
                 </TableCell>
               </TableRow>
             ) : filteredEmployees.length > 0 ? (
-              filteredEmployees.map((emp) => {
+              visibleEmployees.map((emp) => {
                 const badgeVariant =
                   emp.status === "Active"
                     ? "active"
@@ -407,34 +540,28 @@ export default function EmployeeList() {
                       </div>
                     </TableCell>
 
-                    <TableCell>
-                      <div className="space-y-1 text-xs">
-                        <div className="flex items-center gap-1.5 text-zinc-700">
-                          <Mail className="h-3.5 w-3.5 text-zinc-400" />
-                          <span>{emp.email}</span>
-                        </div>
-                      </div>
+                    <TableCell className="hidden lg:table-cell text-sm font-medium text-black">
+                      {emp.position}
                     </TableCell>
-
                     <TableCell>
                       <span className="inline-flex items-center rounded-md bg-zinc-100 border border-zinc-300 px-2 py-1 text-xs font-medium text-black">
                         {emp.department}
                       </span>
                     </TableCell>
 
-                    <TableCell className="text-sm font-medium text-black">
-                      {emp.position}
-                    </TableCell>
-
+                    <TableCell className="hidden xl:table-cell text-sm text-zinc-600">{emp.managerName ?? "Not assigned"}</TableCell>
+                    <TableCell className="hidden xl:table-cell text-xs text-zinc-600">{emp.scheduleName ?? "Not assigned"}</TableCell>
+                    <TableCell className="hidden md:table-cell text-xs text-zinc-600">{emp.hireDate}</TableCell>
                     <TableCell>
                       <Badge variant={badgeVariant}>{emp.status}</Badge>
                     </TableCell>
+                    <TableCell className="text-right"><Link href={`/employees/${emp.id}`} className="inline-flex h-7 items-center rounded-md px-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 hover:text-black">Open</Link></TableCell>
                   </TableRow>
                 )
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={5} className="h-56 text-center">
+                <TableCell colSpan={8} className="h-56 text-center">
                   <div className="flex flex-col items-center justify-center text-zinc-500 space-y-2 py-6">
                     <XCircle className="h-10 w-10 text-zinc-300" />
                     <p className="text-base font-semibold text-black">
@@ -451,6 +578,18 @@ export default function EmployeeList() {
         </Table>
       </div>
       )}
+
+      {!isLoading && !loadError && pageCount > 1 && (
+        <div className="flex items-center justify-between text-xs text-zinc-500">
+          <span>Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filteredEmployees.length)} of {filteredEmployees.length}</span>
+          <div className="flex items-center gap-2"><Button variant="outline" size="icon-sm" disabled={page === 1} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft /></Button><span>Page {page} of {pageCount}</span><Button variant="outline" size="icon-sm" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight /></Button></div>
+        </div>
+      )}
+
+      <Dialog open={isImportOpen} onOpenChange={setIsImportOpen} className="max-w-5xl">
+        <DialogHeader><DialogTitle>Import Employee Data</DialogTitle><DialogDescription>Upload an Excel or CSV file containing employee records. CSV is supported directly; use the template for the expected columns.</DialogDescription></DialogHeader>
+        {importResult ? <div className="space-y-5"><div className="flex items-center gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-4"><CheckCircle2 className="h-5 w-5 text-emerald-600" /><div><p className="font-semibold text-black">Import Complete</p><p className="text-sm text-zinc-600">Successfully imported: {importResult.imported} | Skipped: {importResult.skipped} | Errors: {importResult.errors}</p></div></div><DialogFooter><Button variant="outline" onClick={() => { setImportRows([]); setImportResult(null) }}>Import Another File</Button><Button onClick={() => setIsImportOpen(false)}>Done</Button></DialogFooter></div> : <div className="space-y-4"><label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-zinc-400 bg-zinc-50 px-6 py-10 text-center hover:bg-zinc-100"><Upload className="h-6 w-6 text-zinc-500" /><span className="font-semibold text-black">Choose Excel or CSV file</span><span className="text-xs text-zinc-500">Upload an Excel or CSV file containing employee records.</span><input type="file" accept=".csv,.xlsx" className="sr-only" onChange={(event) => handleImportFile(event.target.files?.[0])} /></label><Button type="button" variant="outline" onClick={downloadTemplate}>Download Template</Button>{importError && <p className="text-sm font-medium text-red-700">{importError}</p>}{importRows.length > 0 && <><div className="grid gap-2 sm:grid-cols-4"><div className="rounded border p-3"><p className="text-xs text-zinc-500">Total rows</p><p className="text-xl font-semibold">{importRows.length}</p></div><div className="rounded border p-3"><p className="text-xs text-zinc-500">Valid rows</p><p className="text-xl font-semibold text-emerald-700">{importRows.filter((row) => row.valid).length}</p></div><div className="rounded border p-3"><p className="text-xs text-zinc-500">Rows with errors</p><p className="text-xl font-semibold text-red-700">{importRows.filter((row) => !row.valid).length}</p></div><div className="rounded border p-3"><p className="text-xs text-zinc-500">Duplicate rows</p><p className="text-xl font-semibold">{importRows.filter((row) => row.validation.toLowerCase().includes("duplicate")).length}</p></div></div><div className="max-h-64 overflow-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Row</TableHead><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Department</TableHead><TableHead>Position</TableHead><TableHead>Validation</TableHead></TableRow></TableHeader><TableBody>{importRows.map((row) => <TableRow key={row.row}><TableCell>{row.row}</TableCell><TableCell>{row.fullName}</TableCell><TableCell>{row.workEmail}</TableCell><TableCell>{row.department}</TableCell><TableCell>{row.jobTitle}</TableCell><TableCell className={row.valid ? "text-emerald-700" : "text-red-700"}>{row.valid ? "Valid" : <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" />{row.validation}</span>}</TableCell></TableRow>)}</TableBody></Table></div><DialogFooter><Button variant="outline" onClick={() => setIsImportOpen(false)}>Cancel</Button><Button disabled={importing || !importRows.some((row) => row.valid)} onClick={runImport}>{importing ? "Importing..." : "Import Valid Rows"}</Button></DialogFooter></>}</div>}
+      </Dialog>
 
       {/* Add Employee Modal / Dialog */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
