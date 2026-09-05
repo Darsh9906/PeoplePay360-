@@ -31,6 +31,7 @@ export default function Sidebar() {
     { label: "Time Off", href: "#", icon: Calendar, disabled: true },
     { label: "Payroll", href: "#", icon: DollarSign, disabled: true },
     { label: "Schedules", href: "#", icon: Briefcase, disabled: true },
+    { label: "User Management", href: "/users", icon: Users },
     { label: "Settings", href: "#", icon: Settings, disabled: true },
   ]
 
