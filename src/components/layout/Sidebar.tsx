@@ -30,6 +30,8 @@ export default function Sidebar() {
     { label: "Attendance", href: "/attendance", icon: Clock },
     { label: "Time Off", href: "/timeoff", icon: Calendar },
     { label: "Payroll", href: "#", icon: DollarSign, disabled: true },
+    { label: "Time Off", href: "#", icon: Calendar, disabled: true },
+    { label: "Payroll", href: "/payroll", icon: DollarSign },
     { label: "Schedules", href: "/schedules", icon: Briefcase },
     { label: "User Management", href: "/users", icon: Users },
     { label: "Settings", href: "#", icon: Settings, disabled: true },

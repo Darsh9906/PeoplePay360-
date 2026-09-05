@@ -30,7 +30,7 @@ import {
 const tabs = ["Overview", "Contracts", "Attendance", "Time Off", "Payslips"]
 
 const summary = [
-  { label: "Contracts", value: "2", icon: FileText },
+  { label: "Contracts", value: "2", icon: FileText }, 
   { label: "Attendance", value: "22", icon: Clock3 },
   { label: "Time Off", value: "3", icon: CalendarDays },
   { label: "Payslips", value: "5", icon: WalletCards },

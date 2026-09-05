@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import {
+import { 
   Table,
   TableHeader,
   TableBody,
@@ -78,7 +78,7 @@ export default function EmployeeList() {
 
       const matchesDepartment =
         selectedDepartment === "ALL" || emp.department === selectedDepartment
-
+       
       const matchesStatus =
         selectedStatus === "ALL" || emp.status === selectedStatus
 
