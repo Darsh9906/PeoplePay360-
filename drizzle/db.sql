@@ -1,10 +1,10 @@
-CREATE TYPE "public"."attendance_status" AS ENUM('present', 'late', 'absent', 'half_day');--> statement-breakpoint
-CREATE TYPE "public"."contract_status" AS ENUM('active', 'expired', 'terminated');--> statement-breakpoint
-CREATE TYPE "public"."employee_status" AS ENUM('active', 'inactive', 'terminated');--> statement-breakpoint
-CREATE TYPE "public"."payrun_status" AS ENUM('draft', 'computed', 'validated', 'paid');--> statement-breakpoint
-CREATE TYPE "public"."request_status" AS ENUM('submitted', 'approved', 'refused');--> statement-breakpoint
-CREATE TYPE "public"."salary_rule_category" AS ENUM('earning', 'deduction', 'net');--> statement-breakpoint
-CREATE TYPE "public"."user_role" AS ENUM('employee', 'hr_manager', 'payroll_user', 'payroll_manager', 'admin');--> statement-breakpoint
+CREATE TYPE "public"."attendance_status" AS ENUM('present', 'late', 'absent', 'half_day');
+CREATE TYPE "public"."contract_status" AS ENUM('active', 'expired', 'terminated');
+CREATE TYPE "public"."employee_status" AS ENUM('active', 'inactive', 'terminated');
+CREATE TYPE "public"."payrun_status" AS ENUM('draft', 'computed', 'validated', 'paid');
+CREATE TYPE "public"."request_status" AS ENUM('submitted', 'approved', 'refused');
+CREATE TYPE "public"."salary_rule_category" AS ENUM('earning', 'deduction', 'net');
+CREATE TYPE "public"."user_role" AS ENUM('employee', 'hr_manager', 'payroll_user', 'payroll_manager', 'admin');
 CREATE TABLE "attendance_records" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"employee_id" uuid NOT NULL,
