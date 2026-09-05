@@ -1,7 +1,21 @@
 import { asc, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { departments, employees } from "@/db/schema";
-import { ok, serverError } from "../_lib/responses";
+import { writeAuditLog } from "../_lib/audit";
+import { badRequest, created, ok, serverError } from "../_lib/responses";
+
+const createEmployeeSchema = z.object({
+  employeeCode: z.string().min(1),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  workEmail: z.string().email(),
+  departmentId: z.string().uuid(),
+  jobTitle: z.string().min(1),
+  managerId: z.string().uuid().nullable().optional(),
+  status: z.enum(["active", "inactive", "terminated"]).default("active"),
+  hireDate: z.string().min(1),
+});
 
 export async function GET() {
   try {
@@ -27,6 +41,35 @@ export async function GET() {
         fullName: `${employee.firstName} ${employee.lastName}`,
       })),
     );
+  } catch (error) {
+    return serverError(error);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const parsed = createEmployeeSchema.safeParse(await request.json());
+
+    if (!parsed.success) {
+      return badRequest(parsed.error.issues[0]?.message ?? "Invalid request");
+    }
+
+    const [employee] = await db
+      .insert(employees)
+      .values({
+        ...parsed.data,
+        workEmail: parsed.data.workEmail.toLowerCase(),
+      })
+      .returning();
+
+    await writeAuditLog({
+      action: "create",
+      entityType: "employee",
+      entityId: employee.id,
+      summary: `Created employee ${employee.employeeCode}`,
+    });
+
+    return created(employee);
   } catch (error) {
     return serverError(error);
   }

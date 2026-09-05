@@ -23,6 +23,13 @@ export const userRoleEnum = pgEnum("user_role", [
   "admin",
 ]);
 
+export const userStatusEnum = pgEnum("user_status", [
+  "invited",
+  "active",
+  "inactive",
+  "suspended",
+]);
+
 export const employeeStatusEnum = pgEnum("employee_status", [
   "active",
   "inactive",
@@ -61,6 +68,78 @@ export const salaryRuleCategoryEnum = pgEnum("salary_rule_category", [
   "net",
 ]);
 
+export const scheduleStatusEnum = pgEnum("schedule_status", [
+  "active",
+  "inactive",
+]);
+
+export const approvalEntityEnum = pgEnum("approval_entity", [
+  "time_off",
+  "payrun",
+  "contract",
+]);
+
+export const approvalStatusEnum = pgEnum("approval_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "cancelled",
+]);
+
+export const auditActionEnum = pgEnum("audit_action", [
+  "create",
+  "update",
+  "delete",
+  "login",
+  "logout",
+  "approve",
+  "reject",
+  "compute",
+  "pay",
+]);
+
+export const documentEntityEnum = pgEnum("document_entity", [
+  "employee",
+  "contract",
+  "payslip",
+  "payrun",
+]);
+
+export const documentTypeEnum = pgEnum("document_type", [
+  "identity",
+  "contract",
+  "payslip",
+  "tax",
+  "other",
+]);
+
+export const notificationChannelEnum = pgEnum("notification_channel", [
+  "in_app",
+  "email",
+]);
+
+export const notificationStatusEnum = pgEnum("notification_status", [
+  "pending",
+  "sent",
+  "read",
+  "failed",
+]);
+
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "draft",
+  "approved",
+  "processing",
+  "paid",
+  "failed",
+]);
+
+export const statutoryComponentEnum = pgEnum("statutory_component", [
+  "pf",
+  "esi",
+  "professional_tax",
+  "income_tax",
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -68,6 +147,13 @@ export const users = pgTable(
     name: varchar("name", { length: 140 }).notNull(),
     email: varchar("email", { length: 255 }).notNull(),
     role: userRoleEnum("role").notNull().default("employee"),
+    status: userStatusEnum("status").notNull().default("active"),
+    passwordHash: text("password_hash"),
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    passwordChangedAt: timestamp("password_changed_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -77,11 +163,101 @@ export const users = pgTable(
   }),
 );
 
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    userAgent: text("user_agent"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    tokenIdx: uniqueIndex("sessions_token_hash_idx").on(table.tokenHash),
+    userIdx: index("sessions_user_idx").on(table.userId),
+  }),
+);
+
+export const inviteTokens = pgTable(
+  "invite_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    email: varchar("email", { length: 255 }).notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    tokenIdx: uniqueIndex("invite_tokens_token_hash_idx").on(table.tokenHash),
+    userIdx: index("invite_tokens_user_idx").on(table.userId),
+  }),
+);
+
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    tokenIdx: uniqueIndex("password_reset_tokens_token_hash_idx").on(
+      table.tokenHash,
+    ),
+    userIdx: index("password_reset_tokens_user_idx").on(table.userId),
+  }),
+);
+
 export const departments = pgTable("departments", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 120 }).notNull(),
   code: varchar("code", { length: 30 }).notNull(),
 });
+
+export const workingSchedules = pgTable(
+  "working_schedules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 140 }).notNull(),
+    workingDays: text("working_days").notNull(),
+    startTime: varchar("start_time", { length: 5 }).notNull(),
+    endTime: varchar("end_time", { length: 5 }).notNull(),
+    breakDurationMinutes: integer("break_duration_minutes")
+      .notNull()
+      .default(0),
+    timezone: varchar("timezone", { length: 80 })
+      .notNull()
+      .default("Asia/Kolkata"),
+    status: scheduleStatusEnum("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    nameIdx: uniqueIndex("working_schedules_name_idx").on(table.name),
+  }),
+);
 
 export const employees = pgTable(
   "employees",
@@ -110,6 +286,26 @@ export const employees = pgTable(
   }),
 );
 
+export const employeeWorkingSchedules = pgTable(
+  "employee_working_schedules",
+  {
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    scheduleId: uuid("schedule_id")
+      .notNull()
+      .references(() => workingSchedules.id, { onDelete: "cascade" }),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.employeeId, table.scheduleId] }),
+    scheduleIdx: index("employee_working_schedules_schedule_idx").on(
+      table.scheduleId,
+    ),
+  }),
+);
+
 export const contracts = pgTable(
   "contracts",
   {
@@ -125,6 +321,9 @@ export const contracts = pgTable(
     salaryStructureId: uuid("salary_structure_id").references(
       () => salaryStructures.id,
     ),
+    approvedBy: uuid("approved_by").references(() => users.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    notes: text("notes"),
   },
   (table) => ({
     employeeIdx: index("contracts_employee_idx").on(table.employeeId),
@@ -167,6 +366,9 @@ export const timeOffRequests = pgTable(
     durationDays: numeric("duration_days", { precision: 6, scale: 2 }).notNull(),
     status: requestStatusEnum("status").notNull().default("submitted"),
     reason: text("reason"),
+    reviewedBy: uuid("reviewed_by").references(() => users.id),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    rejectedReason: text("rejected_reason"),
   },
   (table) => ({
     employeeIdx: index("time_off_employee_idx").on(table.employeeId),
@@ -208,6 +410,11 @@ export const payruns = pgTable("payruns", {
     () => salaryStructures.id,
   ),
   status: payrunStatusEnum("status").notNull().default("draft"),
+  createdBy: uuid("created_by").references(() => users.id),
+  validatedBy: uuid("validated_by").references(() => users.id),
+  validatedAt: timestamp("validated_at", { withTimezone: true }),
+  paidBy: uuid("paid_by").references(() => users.id),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -292,16 +499,283 @@ export const payrollWarnings = pgTable("payroll_warnings", {
   message: text("message").notNull(),
 });
 
-export const usersRelations = relations(users, ({ one }) => ({
+export const approvals = pgTable(
+  "approvals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    entityType: approvalEntityEnum("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    status: approvalStatusEnum("status").notNull().default("pending"),
+    requestedBy: uuid("requested_by").references(() => users.id),
+    reviewedBy: uuid("reviewed_by").references(() => users.id),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    entityIdx: index("approvals_entity_idx").on(
+      table.entityType,
+      table.entityId,
+    ),
+    statusIdx: index("approvals_status_idx").on(table.status),
+  }),
+);
+
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    actorUserId: uuid("actor_user_id").references(() => users.id),
+    action: auditActionEnum("action").notNull(),
+    entityType: varchar("entity_type", { length: 80 }).notNull(),
+    entityId: uuid("entity_id"),
+    summary: text("summary").notNull(),
+    metadata: text("metadata"),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    entityIdx: index("audit_logs_entity_idx").on(
+      table.entityType,
+      table.entityId,
+    ),
+    actorIdx: index("audit_logs_actor_idx").on(table.actorUserId),
+  }),
+);
+
+export const employeeBankAccounts = pgTable(
+  "employee_bank_accounts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    accountHolderName: varchar("account_holder_name", { length: 140 }).notNull(),
+    bankName: varchar("bank_name", { length: 140 }).notNull(),
+    accountNumberMasked: varchar("account_number_masked", {
+      length: 40,
+    }).notNull(),
+    ifscCode: varchar("ifsc_code", { length: 20 }).notNull(),
+    isPrimary: boolean("is_primary").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    employeeIdx: index("employee_bank_accounts_employee_idx").on(
+      table.employeeId,
+    ),
+  }),
+);
+
+export const paymentBatches = pgTable(
+  "payment_batches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    payrunId: uuid("payrun_id")
+      .notNull()
+      .references(() => payruns.id, { onDelete: "cascade" }),
+    status: paymentStatusEnum("status").notNull().default("draft"),
+    totalAmount: numeric("total_amount", { precision: 14, scale: 2 })
+      .notNull()
+      .default("0.00"),
+    createdBy: uuid("created_by").references(() => users.id),
+    approvedBy: uuid("approved_by").references(() => users.id),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    payrunIdx: uniqueIndex("payment_batches_payrun_idx").on(table.payrunId),
+  }),
+);
+
+export const paymentTransactions = pgTable(
+  "payment_transactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => paymentBatches.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id),
+    payslipId: uuid("payslip_id").references(() => payslips.id),
+    bankAccountId: uuid("bank_account_id").references(
+      () => employeeBankAccounts.id,
+    ),
+    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    status: paymentStatusEnum("status").notNull().default("draft"),
+    referenceNumber: varchar("reference_number", { length: 120 }),
+    failureReason: text("failure_reason"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    batchIdx: index("payment_transactions_batch_idx").on(table.batchId),
+    employeeIdx: index("payment_transactions_employee_idx").on(
+      table.employeeId,
+    ),
+  }),
+);
+
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    entityType: documentEntityEnum("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    documentType: documentTypeEnum("document_type").notNull().default("other"),
+    fileName: varchar("file_name", { length: 255 }).notNull(),
+    fileUrl: text("file_url").notNull(),
+    mimeType: varchar("mime_type", { length: 120 }),
+    uploadedBy: uuid("uploaded_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    entityIdx: index("documents_entity_idx").on(
+      table.entityType,
+      table.entityId,
+    ),
+  }),
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channel: notificationChannelEnum("channel").notNull().default("in_app"),
+    title: varchar("title", { length: 160 }).notNull(),
+    message: text("message").notNull(),
+    status: notificationStatusEnum("status").notNull().default("pending"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userIdx: index("notifications_user_idx").on(table.userId),
+    statusIdx: index("notifications_status_idx").on(table.status),
+  }),
+);
+
+export const emailLogs = pgTable(
+  "email_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id),
+    email: varchar("email", { length: 255 }).notNull(),
+    subject: varchar("subject", { length: 255 }).notNull(),
+    status: notificationStatusEnum("status").notNull().default("pending"),
+    provider: varchar("provider", { length: 80 }),
+    providerMessageId: varchar("provider_message_id", { length: 180 }),
+    errorMessage: text("error_message"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    emailIdx: index("email_logs_email_idx").on(table.email),
+    userIdx: index("email_logs_user_idx").on(table.userId),
+  }),
+);
+
+export const statutorySettings = pgTable(
+  "statutory_settings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    component: statutoryComponentEnum("component").notNull(),
+    code: varchar("code", { length: 40 }).notNull(),
+    name: varchar("name", { length: 140 }).notNull(),
+    rate: numeric("rate", { precision: 6, scale: 2 }),
+    fixedAmount: numeric("fixed_amount", { precision: 12, scale: 2 }),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    isActive: boolean("is_active").notNull().default(true),
+  },
+  (table) => ({
+    codeIdx: uniqueIndex("statutory_settings_code_idx").on(table.code),
+    componentIdx: index("statutory_settings_component_idx").on(table.component),
+  }),
+);
+
+export const usersRelations = relations(users, ({ many, one }) => ({
   employee: one(employees, {
     fields: [users.id],
     references: [employees.userId],
   }),
+  sessions: many(sessions),
+  inviteTokens: many(inviteTokens, { relationName: "invited_user" }),
+  createdInviteTokens: many(inviteTokens, { relationName: "invite_creator" }),
+  passwordResetTokens: many(passwordResetTokens),
+  notifications: many(notifications),
+  emailLogs: many(emailLogs),
+  auditLogs: many(auditLogs, { relationName: "audit_actor" }),
+  requestedApprovals: many(approvals, { relationName: "approval_requester" }),
+  reviewedApprovals: many(approvals, { relationName: "approval_reviewer" }),
+  approvedContracts: many(contracts, { relationName: "contract_approver" }),
+  reviewedTimeOffRequests: many(timeOffRequests, {
+    relationName: "time_off_reviewer",
+  }),
+  createdPayruns: many(payruns, { relationName: "payrun_creator" }),
+  validatedPayruns: many(payruns, { relationName: "payrun_validator" }),
+  paidPayruns: many(payruns, { relationName: "payrun_payer" }),
+  uploadedDocuments: many(documents, { relationName: "document_uploader" }),
 }));
 
 export const departmentsRelations = relations(departments, ({ many }) => ({
   employees: many(employees),
 }));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const inviteTokensRelations = relations(inviteTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [inviteTokens.userId],
+    references: [users.id],
+    relationName: "invited_user",
+  }),
+  creator: one(users, {
+    fields: [inviteTokens.createdBy],
+    references: [users.id],
+    relationName: "invite_creator",
+  }),
+}));
+
+export const passwordResetTokensRelations = relations(
+  passwordResetTokens,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [passwordResetTokens.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const workingSchedulesRelations = relations(
+  workingSchedules,
+  ({ many }) => ({
+    employees: many(employeeWorkingSchedules),
+  }),
+);
 
 export const employeesRelations = relations(employees, ({ one, many }) => ({
   user: one(users, {
@@ -324,6 +798,9 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   attendanceRecords: many(attendanceRecords),
   timeOffRequests: many(timeOffRequests),
   payslips: many(payslips),
+  workingSchedules: many(employeeWorkingSchedules),
+  bankAccounts: many(employeeBankAccounts),
+  paymentTransactions: many(paymentTransactions),
 }));
 
 export const contractsRelations = relations(contracts, ({ one }) => ({
@@ -335,7 +812,26 @@ export const contractsRelations = relations(contracts, ({ one }) => ({
     fields: [contracts.salaryStructureId],
     references: [salaryStructures.id],
   }),
+  approver: one(users, {
+    fields: [contracts.approvedBy],
+    references: [users.id],
+    relationName: "contract_approver",
+  }),
 }));
+
+export const employeeWorkingSchedulesRelations = relations(
+  employeeWorkingSchedules,
+  ({ one }) => ({
+    employee: one(employees, {
+      fields: [employeeWorkingSchedules.employeeId],
+      references: [employees.id],
+    }),
+    schedule: one(workingSchedules, {
+      fields: [employeeWorkingSchedules.scheduleId],
+      references: [workingSchedules.id],
+    }),
+  }),
+);
 
 export const attendanceRelations = relations(attendanceRecords, ({ one }) => ({
   employee: one(employees, {
@@ -348,6 +844,11 @@ export const timeOffRelations = relations(timeOffRequests, ({ one }) => ({
   employee: one(employees, {
     fields: [timeOffRequests.employeeId],
     references: [employees.id],
+  }),
+  reviewer: one(users, {
+    fields: [timeOffRequests.reviewedBy],
+    references: [users.id],
+    relationName: "time_off_reviewer",
   }),
 }));
 
@@ -372,9 +873,25 @@ export const payrunsRelations = relations(payruns, ({ one, many }) => ({
     fields: [payruns.salaryStructureId],
     references: [salaryStructures.id],
   }),
+  creator: one(users, {
+    fields: [payruns.createdBy],
+    references: [users.id],
+    relationName: "payrun_creator",
+  }),
+  validator: one(users, {
+    fields: [payruns.validatedBy],
+    references: [users.id],
+    relationName: "payrun_validator",
+  }),
+  payer: one(users, {
+    fields: [payruns.paidBy],
+    references: [users.id],
+    relationName: "payrun_payer",
+  }),
   employees: many(payrunEmployees),
   payslips: many(payslips),
   warnings: many(payrollWarnings),
+  paymentBatch: many(paymentBatches),
 }));
 
 export const payrunEmployeesRelations = relations(
@@ -428,8 +945,111 @@ export const payrollWarningsRelations = relations(
   }),
 );
 
+export const approvalsRelations = relations(approvals, ({ one }) => ({
+  requester: one(users, {
+    fields: [approvals.requestedBy],
+    references: [users.id],
+    relationName: "approval_requester",
+  }),
+  reviewer: one(users, {
+    fields: [approvals.reviewedBy],
+    references: [users.id],
+    relationName: "approval_reviewer",
+  }),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  actor: one(users, {
+    fields: [auditLogs.actorUserId],
+    references: [users.id],
+    relationName: "audit_actor",
+  }),
+}));
+
+export const employeeBankAccountsRelations = relations(
+  employeeBankAccounts,
+  ({ one, many }) => ({
+    employee: one(employees, {
+      fields: [employeeBankAccounts.employeeId],
+      references: [employees.id],
+    }),
+    paymentTransactions: many(paymentTransactions),
+  }),
+);
+
+export const paymentBatchesRelations = relations(
+  paymentBatches,
+  ({ one, many }) => ({
+    payrun: one(payruns, {
+      fields: [paymentBatches.payrunId],
+      references: [payruns.id],
+    }),
+    creator: one(users, {
+      fields: [paymentBatches.createdBy],
+      references: [users.id],
+      relationName: "payment_batch_creator",
+    }),
+    approver: one(users, {
+      fields: [paymentBatches.approvedBy],
+      references: [users.id],
+      relationName: "payment_batch_approver",
+    }),
+    transactions: many(paymentTransactions),
+  }),
+);
+
+export const paymentTransactionsRelations = relations(
+  paymentTransactions,
+  ({ one }) => ({
+    batch: one(paymentBatches, {
+      fields: [paymentTransactions.batchId],
+      references: [paymentBatches.id],
+    }),
+    employee: one(employees, {
+      fields: [paymentTransactions.employeeId],
+      references: [employees.id],
+    }),
+    payslip: one(payslips, {
+      fields: [paymentTransactions.payslipId],
+      references: [payslips.id],
+    }),
+    bankAccount: one(employeeBankAccounts, {
+      fields: [paymentTransactions.bankAccountId],
+      references: [employeeBankAccounts.id],
+    }),
+  }),
+);
+
+export const documentsRelations = relations(documents, ({ one }) => ({
+  uploader: one(users, {
+    fields: [documents.uploadedBy],
+    references: [users.id],
+    relationName: "document_uploader",
+  }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+export const emailLogsRelations = relations(emailLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [emailLogs.userId],
+    references: [users.id],
+  }),
+}));
+
 export type Employee = typeof employees.$inferSelect;
 export type NewEmployee = typeof employees.$inferInsert;
 export type Contract = typeof contracts.$inferSelect;
 export type Payrun = typeof payruns.$inferSelect;
 export type Payslip = typeof payslips.$inferSelect;
+export type User = typeof users.$inferSelect;
+export type WorkingSchedule = typeof workingSchedules.$inferSelect;
+export type TimeOffRequest = typeof timeOffRequests.$inferSelect;
+export type PaymentBatch = typeof paymentBatches.$inferSelect;
+export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
+export type Document = typeof documents.$inferSelect;

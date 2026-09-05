@@ -10,8 +10,20 @@ export function badRequest(message: string) {
   return Response.json({ error: message }, { status: 400 });
 }
 
+export function unauthorized(message = "Unauthorized") {
+  return Response.json({ error: message }, { status: 401 });
+}
+
+export function forbidden(message = "Forbidden") {
+  return Response.json({ error: message }, { status: 403 });
+}
+
 export function notFound(message = "Not found") {
   return Response.json({ error: message }, { status: 404 });
+}
+
+export function noContent() {
+  return new Response(null, { status: 204 });
 }
 
 export function serverError(error: unknown) {
