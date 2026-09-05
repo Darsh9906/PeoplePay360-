@@ -29,6 +29,7 @@ export async function GET(request: Request) {
     const to = searchParams.get("to");
 
     const filters = [
+      eq(employees.organizationId, access.organizationId),
       access.scopeEmployeeId
         ? eq(attendanceRecords.employeeId, access.scopeEmployeeId)
         : undefined,

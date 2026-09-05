@@ -1,10 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { payruns } from "@/db/schema";
 import { loadPayrunPayslips } from "@/lib/payroll/payslip-data";
 import { payslipFileName, renderPayslipPdf } from "@/lib/payroll/payslip-pdf";
-import { isResponse, requireRole } from "../../../_lib/access";
+import { NO_MATCH, isResponse, requireRole } from "../../../_lib/access";
 import { writeAuditLog } from "../../../_lib/audit";
 import { sendPayslipEmail } from "../../../_lib/email";
 import { badRequest, notFound, ok, serverError } from "../../../_lib/responses";
@@ -41,7 +41,10 @@ export async function POST(request: Request, ctx: Params) {
     }
 
     const payrun = await db.query.payruns.findFirst({
-      where: eq(payruns.id, id),
+      where: and(
+        eq(payruns.id, id),
+        eq(payruns.organizationId, actor.organizationId ?? NO_MATCH),
+      ),
     });
 
     if (!payrun) {
@@ -109,7 +112,7 @@ export async function POST(request: Request, ctx: Params) {
     const sentCount = results.filter((result) => result.sent).length;
 
     await writeAuditLog({
-      actorUserId: parsed.data.sentBy,
+      actorUserId: parsed.data.sentBy ?? actor.id,
       action: "update",
       entityType: "payrun",
       entityId: id,

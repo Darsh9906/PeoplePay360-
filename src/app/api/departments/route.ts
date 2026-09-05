@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { departments, employees } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
+import { isResponse, resolveAccess } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const departmentSchema = z.object({
@@ -12,6 +13,12 @@ const departmentSchema = z.object({
 
 export async function GET() {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const rows = await db
       .select({
         id: departments.id,
@@ -21,6 +28,7 @@ export async function GET() {
       })
       .from(departments)
       .leftJoin(employees, eq(employees.departmentId, departments.id))
+      .where(eq(departments.organizationId, access.organizationId))
       .groupBy(departments.id)
       .orderBy(asc(departments.name));
 
@@ -32,6 +40,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const parsed = departmentSchema.safeParse(await request.json());
 
     if (!parsed.success) {
@@ -40,7 +54,7 @@ export async function POST(request: Request) {
 
     const [department] = await db
       .insert(departments)
-      .values(parsed.data)
+      .values({ ...parsed.data, organizationId: access.organizationId })
       .returning();
 
     await writeAuditLog({

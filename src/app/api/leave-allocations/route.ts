@@ -51,6 +51,7 @@ export async function GET(request: Request) {
     const status = searchParams.get("status");
 
     const filters = [
+      eq(employees.organizationId, access.organizationId),
       access.scopeEmployeeId
         ? eq(leaveAllocations.employeeId, access.scopeEmployeeId)
         : undefined,

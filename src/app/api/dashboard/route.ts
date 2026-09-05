@@ -12,7 +12,7 @@ import {
   timeOffRequests,
   timeOffTypes,
 } from "@/db/schema";
-import { isResponse, requireRole } from "../_lib/access";
+import { NO_MATCH, isResponse, requireRole } from "../_lib/access";
 import { ok, serverError } from "../_lib/responses";
 
 /**
@@ -39,7 +39,10 @@ export async function GET(request: Request) {
     const employeeType = searchParams.get("employeeType");
 
     // Resolve the filters to a concrete set of employees once, then reuse it.
+    const organizationId = actor.organizationId ?? NO_MATCH;
+
     const employeeFilters = [
+      eq(employees.organizationId, organizationId),
       departmentId ? eq(employees.departmentId, departmentId) : undefined,
       employeeType && employeeType !== "all"
         ? eq(employees.status, employeeType as "active" | "inactive" | "terminated")
@@ -52,7 +55,8 @@ export async function GET(request: Request) {
       .where(employeeFilters.length ? and(...employeeFilters) : undefined);
 
     const employeeIds = scopedEmployees.map((row) => row.id);
-    const isFiltered = employeeFilters.length > 0;
+    // Always true now: the workspace filter alone scopes every aggregate.
+    const isFiltered = true;
 
     // A filter that matches nothing must produce zeros, not everything.
     if (isFiltered && employeeIds.length === 0) {
@@ -95,6 +99,7 @@ export async function GET(request: Request) {
       : undefined;
 
     const periodFilters = [
+      eq(payruns.organizationId, organizationId),
       from ? gte(payruns.periodStart, from) : undefined,
       to ? lte(payruns.periodEnd, to) : undefined,
     ].filter(Boolean);
@@ -227,6 +232,7 @@ export async function GET(request: Request) {
         grossPay: sql<string>`coalesce(sum(${payslips.grossPay}) filter (where ${payruns.id} is not null), 0)::text`,
       })
       .from(departments)
+      .where(eq(departments.organizationId, organizationId))
       .leftJoin(
         employees,
         and(

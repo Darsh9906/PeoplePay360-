@@ -1,8 +1,9 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { timeOffTypes } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
+import { isResponse, resolveAccess } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const timeOffTypeSchema = z.object({
@@ -19,6 +20,12 @@ const timeOffTypeSchema = z.object({
 
 export async function GET(request: Request) {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("active") === "true";
 
@@ -44,7 +51,14 @@ export async function GET(request: Request) {
         )`,
       })
       .from(timeOffTypes)
-      .where(activeOnly ? eq(timeOffTypes.isActive, true) : undefined)
+      .where(
+        activeOnly
+          ? and(
+              eq(timeOffTypes.organizationId, access.organizationId),
+              eq(timeOffTypes.isActive, true),
+            )
+          : eq(timeOffTypes.organizationId, access.organizationId),
+      )
       .orderBy(asc(timeOffTypes.name));
 
     return ok(rows);
@@ -55,6 +69,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const parsed = timeOffTypeSchema.safeParse(await request.json());
 
     if (!parsed.success) {
@@ -63,7 +83,7 @@ export async function POST(request: Request) {
 
     const [type] = await db
       .insert(timeOffTypes)
-      .values(parsed.data)
+      .values({ ...parsed.data, organizationId: access.organizationId })
       .returning();
 
     await writeAuditLog({

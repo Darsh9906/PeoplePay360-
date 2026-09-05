@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { payruns } from "@/db/schema";
 import { writeAuditLog } from "../../../_lib/audit";
-import { isResponse, requireRole } from "../../../_lib/access";
+import { NO_MATCH, isResponse, requireRole } from "../../../_lib/access";
 import { badRequest, notFound, ok, serverError } from "../../../_lib/responses";
 
 type Params = { params: Promise<{ id: string }> };
@@ -14,11 +14,7 @@ const paidSchema = z.object({
 
 export async function POST(request: Request, ctx: Params) {
   try {
-    const actor = await requireRole([
-      "payroll_user",
-      "payroll_manager",
-      "admin",
-    ]);
+    const actor = await requireRole(["payroll_manager", "admin"]);
 
     if (isResponse(actor)) {
       return actor;
@@ -34,10 +30,15 @@ export async function POST(request: Request, ctx: Params) {
       .update(payruns)
       .set({
         status: "paid",
-        paidBy: parsed.data.paidBy,
+        paidBy: parsed.data.paidBy ?? actor.id,
         paidAt: new Date(),
       })
-      .where(eq(payruns.id, id))
+      .where(
+        and(
+          eq(payruns.id, id),
+          eq(payruns.organizationId, actor.organizationId ?? NO_MATCH),
+        ),
+      )
       .returning();
 
     if (!payrun) {
@@ -45,7 +46,7 @@ export async function POST(request: Request, ctx: Params) {
     }
 
     await writeAuditLog({
-      actorUserId: parsed.data.paidBy,
+      actorUserId: parsed.data.paidBy ?? actor.id,
       action: "pay",
       entityType: "payrun",
       entityId: id,

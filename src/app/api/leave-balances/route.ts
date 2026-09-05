@@ -21,6 +21,7 @@ export async function GET(request: Request) {
     const employeeId = access.scopeEmployeeId ?? searchParams.get("employeeId");
 
     const filters = [
+      eq(employees.organizationId, access.organizationId),
       eq(leaveAllocations.status, "approved"),
       employeeId ? eq(leaveAllocations.employeeId, employeeId) : undefined,
     ].filter(Boolean);

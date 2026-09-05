@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,8 +20,11 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    if (isAuthenticated) router.replace(defaultPathForRole(user?.role))
-  }, [isAuthenticated, router, user?.role])
+    if (!isAuthenticated) return
+    router.replace(
+      user?.mustChangePassword ? "/change-password" : defaultPathForRole(user?.role),
+    )
+  }, [isAuthenticated, router, user?.mustChangePassword, user?.role])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -37,7 +41,12 @@ export default function Login() {
         email: email.trim(),
         password,
       })
-      router.push(defaultPathForRole(loggedInUser.role))
+      // A temporary password is only good for reaching the change screen.
+      router.push(
+        loggedInUser.mustChangePassword
+          ? "/change-password"
+          : defaultPathForRole(loggedInUser.role),
+      )
     } catch (error) {
       setError(error instanceof Error ? error.message : "Unable to sign in.")
     } finally {
@@ -53,7 +62,7 @@ export default function Login() {
             P
           </div>
           <p className="text-sm font-semibold tracking-wide text-black">PeoplePay360</p>
-          <p className="mt-1 text-xs text-zinc-500">Intelligent Payroll Operations</p>
+          <p className="mt-1 text-xs text-zinc-500">HR &amp; Payroll</p>
         </div>
 
         <Card className="border-zinc-300 bg-white text-black shadow-xl shadow-zinc-200/60">
@@ -86,9 +95,12 @@ export default function Login() {
                   <label className="text-xs font-medium text-zinc-700" htmlFor="password">
                     Password
                   </label>
-                  <button className="text-xs text-zinc-500 transition hover:text-black" type="button">
-                    Forgot Password?
-                  </button>
+                  <span
+                    className="text-xs text-zinc-400"
+                    title="Ask your workspace administrator to reset it"
+                  >
+                    Forgot? Ask your admin
+                  </span>
                 </div>
                 <div className="relative">
                   <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
@@ -122,7 +134,18 @@ export default function Login() {
           </CardContent>
         </Card>
 
-        <p className="mt-6 text-center text-xs text-zinc-500">PeoplePay360 Workspace · Secure access</p>
+        <p className="mt-6 text-center text-xs text-zinc-500">
+          New company?{" "}
+          <Link href="/signup" className="font-semibold text-black hover:underline">
+            Create a workspace
+          </Link>
+        </p>
+
+        <p className="mt-4 text-center text-xs text-zinc-500">
+          <Link href="/" className="transition hover:text-black">
+            Back to home
+          </Link>
+        </p>
       </div>
     </main>
   )

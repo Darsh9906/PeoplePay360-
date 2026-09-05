@@ -83,7 +83,7 @@ function OverviewTab({ employee }) {
           <div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Joining Date</p><p className="mt-1 font-medium text-black">{formatDate(employee.hireDate)}</p><p className="mt-1 text-xs text-zinc-500">Stored from employee profile</p></div>
           <div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Current Salary</p><p className="mt-1 font-medium text-black">{activeContract ? formatINR(activeContract.monthlyWage) : "No active contract"}</p><p className="mt-1 text-xs text-zinc-500">{activeContract ? "From the active contract" : "Add a contract to set pay"}</p></div>
           <div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Working Schedule</p><p className="mt-1 font-medium text-black">{employee.workingSchedule?.name ?? "Not assigned"}</p><p className="mt-1 text-xs text-zinc-500">{employee.workingSchedule ? `${Number(employee.workingSchedule.weeklyHours).toFixed(2)} hrs per week` : "Assign a schedule for payroll expectations"}</p></div>
-          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Status</p><p className="mt-1"><Badge variant={employee.status === "active" ? "active" : "inactive"}>{formatStatus(employee.status)}</Badge></p><p className="mt-1 text-xs text-zinc-500">Employee record state</p></div>
+          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Status</p><div className="mt-1"><Badge variant={employee.status === "active" ? "active" : "inactive"}>{formatStatus(employee.status)}</Badge></div><p className="mt-1 text-xs text-zinc-500">Employee record state</p></div>
         </CardContent>
       </Card>
 

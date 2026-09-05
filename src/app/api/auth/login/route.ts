@@ -51,6 +51,8 @@ export async function POST(request: Request) {
         email: user.email,
         role: user.role,
         status: user.status,
+        // The client sends them straight to /change-password when true.
+        mustChangePassword: user.mustChangePassword,
       },
       {
         headers: {

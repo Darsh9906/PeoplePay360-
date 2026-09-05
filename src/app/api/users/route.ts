@@ -1,10 +1,11 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { employees, inviteTokens, notifications, users } from "@/db/schema";
-import { createToken, hashPassword, hashToken } from "../_lib/auth";
+import { employees, notifications, organizations, users } from "@/db/schema";
+import { roleLabels } from "@/src/lib/rbac";
+import { generateTempPassword, hashPassword } from "../_lib/auth";
+import { NO_MATCH, isResponse, requireRole } from "../_lib/access";
 import { writeAuditLog } from "../_lib/audit";
-import { sendInviteEmail } from "../_lib/email";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const roleSchema = z.enum([
@@ -18,16 +19,50 @@ const roleSchema = z.enum([
 const userStatusSchema = z.enum(["invited", "active", "inactive", "suspended"]);
 
 const createUserSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Enter a valid email address"),
   role: roleSchema.default("employee"),
-  status: userStatusSchema.default("invited"),
+  status: userStatusSchema.default("active"),
   employeeId: z.string().uuid().optional(),
+  /** Set a password directly instead of mailing a temporary one. */
   password: z.string().min(8).optional(),
 });
 
+async function organizationDomain(organizationId: string | null) {
+  if (!organizationId) return null;
+
+  const [organization] = await db
+    .select({ emailDomain: organizations.emailDomain })
+    .from(organizations)
+    .where(eq(organizations.id, organizationId))
+    .limit(1);
+
+  return organization?.emailDomain?.toLowerCase() ?? null;
+}
+
+async function validateWorkspaceEmail(email: string, organizationId: string | null) {
+  const domain = await organizationDomain(organizationId);
+
+  if (!domain) {
+    return "This admin is not linked to an organization workspace";
+  }
+
+  if (!email.endsWith(`@${domain}`)) {
+    return `Use an email from your organization domain: ${domain}`;
+  }
+
+  return null;
+}
+
 export async function GET(request: Request) {
   try {
+    // User administration is admin-only.
+    const actor = await requireRole(["admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { searchParams } = new URL(request.url);
     const role = searchParams.get("role");
     const status = searchParams.get("status");
@@ -39,6 +74,7 @@ export async function GET(request: Request) {
         email: users.email,
         role: users.role,
         status: users.status,
+        mustChangePassword: users.mustChangePassword,
         lastLoginAt: users.lastLoginAt,
         createdAt: users.createdAt,
         employeeId: employees.id,
@@ -47,6 +83,7 @@ export async function GET(request: Request) {
       })
       .from(users)
       .leftJoin(employees, eq(employees.userId, users.id))
+      .where(eq(users.organizationId, actor.organizationId ?? NO_MATCH))
       .orderBy(asc(users.name));
 
     return ok(
@@ -63,26 +100,41 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const actor = await requireRole(["admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const parsed = createUserSchema.safeParse(await request.json());
 
     if (!parsed.success) {
       return badRequest(parsed.error.issues[0]?.message ?? "Invalid request");
     }
 
-    const token = createToken();
-    const passwordHash = parsed.data.password
-      ? hashPassword(parsed.data.password)
-      : null;
+    const email = parsed.data.email.toLowerCase().trim();
+    const emailError = await validateWorkspaceEmail(email, actor.organizationId);
+
+    if (emailError) {
+      return badRequest(emailError);
+    }
+
+    // An admin-created account gets a temporary password it must replace,
+    // unless the admin explicitly set one.
+    const usesTempPassword = !parsed.data.password;
+    const plainPassword = parsed.data.password ?? generateTempPassword();
 
     const [user] = await db
       .insert(users)
       .values({
-        name: parsed.data.name,
-        email: parsed.data.email.toLowerCase(),
+        organizationId: actor.organizationId ?? null,
+        name: parsed.data.name.trim(),
+        email,
         role: parsed.data.role,
-        status: passwordHash ? "active" : parsed.data.status,
-        passwordHash,
-        passwordChangedAt: passwordHash ? new Date() : null,
+        status: "active",
+        passwordHash: hashPassword(plainPassword),
+        mustChangePassword: usesTempPassword,
+        passwordChangedAt: usesTempPassword ? null : new Date(),
       })
       .returning({
         id: users.id,
@@ -90,6 +142,7 @@ export async function POST(request: Request) {
         email: users.email,
         role: users.role,
         status: users.status,
+        mustChangePassword: users.mustChangePassword,
       });
 
     if (parsed.data.employeeId) {
@@ -99,38 +152,26 @@ export async function POST(request: Request) {
         .where(eq(employees.id, parsed.data.employeeId));
     }
 
-    if (!passwordHash) {
-      await db.insert(inviteTokens).values({
-        userId: user.id,
-        email: user.email,
-        tokenHash: hashToken(token),
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 48),
-      });
-      await sendInviteEmail({
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        token,
-      });
-    }
-
     await db.insert(notifications).values({
       userId: user.id,
-      title: "PeoplePay360 access created",
-      message: "Your workspace access has been created.",
+      title: "Your account is ready",
+      message: `An administrator created your ${roleLabels[user.role]} account.`,
       status: "pending",
     });
 
     await writeAuditLog({
+      actorUserId: actor.id,
       action: "create",
       entityType: "user",
       entityId: user.id,
-      summary: `Created user ${user.email}`,
+      summary: `Created ${roleLabels[user.role]} account for ${user.email}`,
     });
 
+    // The admin hands these credentials over directly. There is no mail
+    // provider in the loop, so nothing can silently fail to arrive.
     return created({
       ...user,
-      inviteToken: passwordHash ? undefined : token,
+      tempPassword: usesTempPassword ? plainPassword : undefined,
     });
   } catch (error) {
     return serverError(error);

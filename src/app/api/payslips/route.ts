@@ -16,6 +16,7 @@ export async function GET(request: Request) {
     const payrunId = searchParams.get("payrunId");
     const employeeId = searchParams.get("employeeId");
     const filters = [
+      eq(employees.organizationId, access.organizationId),
       access.scopeEmployeeId
         ? eq(payslips.employeeId, access.scopeEmployeeId)
         : undefined,

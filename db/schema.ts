@@ -151,15 +151,41 @@ export const statutoryComponentEnum = pgEnum("statutory_component", [
   "income_tax",
 ]);
 
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 160 }).notNull(),
+    slug: varchar("slug", { length: 80 }).notNull(),
+    /** Work-email domain of the signing-up company, e.g. "acme.com". */
+    emailDomain: varchar("email_domain", { length: 120 }),
+    industry: varchar("industry", { length: 120 }),
+    companySize: varchar("company_size", { length: 40 }),
+    countryCode: varchar("country_code", { length: 2 }).notNull().default("IN"),
+    currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    slugIdx: uniqueIndex("organizations_slug_idx").on(table.slug),
+  }),
+);
+
 export const users = pgTable(
   "users",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
     name: varchar("name", { length: 140 }).notNull(),
     email: varchar("email", { length: 255 }).notNull(),
     role: userRoleEnum("role").notNull().default("employee"),
     status: userStatusEnum("status").notNull().default("active"),
     passwordHash: text("password_hash"),
+    /** Set when an admin issues a temporary password; cleared on first change. */
+    mustChangePassword: boolean("must_change_password").notNull().default(false),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     passwordChangedAt: timestamp("password_changed_at", {
@@ -242,6 +268,9 @@ export const passwordResetTokens = pgTable(
 
 export const departments = pgTable("departments", {
   id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: varchar("name", { length: 120 }).notNull(),
   code: varchar("code", { length: 30 }).notNull(),
 });
@@ -250,6 +279,9 @@ export const workingSchedules = pgTable(
   "working_schedules",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
     name: varchar("name", { length: 140 }).notNull(),
     workingDays: text("working_days").notNull(),
     startTime: varchar("start_time", { length: 5 }).notNull(),
@@ -269,7 +301,10 @@ export const workingSchedules = pgTable(
       .notNull(),
   },
   (table) => ({
-    nameIdx: uniqueIndex("working_schedules_name_idx").on(table.name),
+    nameIdx: uniqueIndex("working_schedules_name_idx").on(
+      table.organizationId,
+      table.name,
+    ),
   }),
 );
 
@@ -296,6 +331,9 @@ export const employees = pgTable(
   "employees",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
     employeeCode: varchar("employee_code", { length: 30 }).notNull(),
     userId: uuid("user_id").references(() => users.id),
     firstName: varchar("first_name", { length: 80 }).notNull(),
@@ -313,8 +351,14 @@ export const employees = pgTable(
       .notNull(),
   },
   (table) => ({
-    codeIdx: uniqueIndex("employees_code_idx").on(table.employeeCode),
-    emailIdx: uniqueIndex("employees_work_email_idx").on(table.workEmail),
+    codeIdx: uniqueIndex("employees_code_idx").on(
+      table.organizationId,
+      table.employeeCode,
+    ),
+    emailIdx: uniqueIndex("employees_work_email_idx").on(
+      table.organizationId,
+      table.workEmail,
+    ),
     departmentIdx: index("employees_department_idx").on(table.departmentId),
   }),
 );
@@ -390,6 +434,9 @@ export const timeOffTypes = pgTable(
   "time_off_types",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
     name: varchar("name", { length: 120 }).notNull(),
     code: varchar("code", { length: 30 }).notNull(),
     unit: timeOffUnitEnum("unit").notNull().default("days"),
@@ -404,7 +451,10 @@ export const timeOffTypes = pgTable(
       .notNull(),
   },
   (table) => ({
-    codeIdx: uniqueIndex("time_off_types_code_idx").on(table.code),
+    codeIdx: uniqueIndex("time_off_types_code_idx").on(
+      table.organizationId,
+      table.code,
+    ),
   }),
 );
 
@@ -466,6 +516,9 @@ export const timeOffRequests = pgTable(
 
 export const salaryStructures = pgTable("salary_structures", {
   id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: varchar("name", { length: 120 }).notNull(),
   code: varchar("code", { length: 30 }).notNull(),
   isActive: boolean("is_active").notNull().default(true),
@@ -492,6 +545,9 @@ export const salaryRules = pgTable(
 
 export const payruns = pgTable("payruns", {
   id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: varchar("name", { length: 140 }).notNull(),
   periodStart: date("period_start").notNull(),
   periodEnd: date("period_end").notNull(),
@@ -786,6 +842,9 @@ export const statutorySettings = pgTable(
   "statutory_settings",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
     component: statutoryComponentEnum("component").notNull(),
     code: varchar("code", { length: 40 }).notNull(),
     name: varchar("name", { length: 140 }).notNull(),
@@ -796,12 +855,23 @@ export const statutorySettings = pgTable(
     isActive: boolean("is_active").notNull().default(true),
   },
   (table) => ({
-    codeIdx: uniqueIndex("statutory_settings_code_idx").on(table.code),
+    codeIdx: uniqueIndex("statutory_settings_code_idx").on(
+      table.organizationId,
+      table.code,
+    ),
     componentIdx: index("statutory_settings_component_idx").on(table.component),
   }),
 );
 
+export const organizationsRelations = relations(organizations, ({ many }) => ({
+  users: many(users),
+}));
+
 export const usersRelations = relations(users, ({ many, one }) => ({
+  organization: one(organizations, {
+    fields: [users.organizationId],
+    references: [organizations.id],
+  }),
   employee: one(employees, {
     fields: [users.id],
     references: [employees.userId],
@@ -1182,6 +1252,7 @@ export type Contract = typeof contracts.$inferSelect;
 export type Payrun = typeof payruns.$inferSelect;
 export type Payslip = typeof payslips.$inferSelect;
 export type User = typeof users.$inferSelect;
+export type Organization = typeof organizations.$inferSelect;
 export type WorkingSchedule = typeof workingSchedules.$inferSelect;
 export type WorkingScheduleLine = typeof workingScheduleLines.$inferSelect;
 export type TimeOffType = typeof timeOffTypes.$inferSelect;
