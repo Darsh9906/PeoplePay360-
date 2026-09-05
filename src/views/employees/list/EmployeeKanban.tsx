@@ -57,7 +57,7 @@ export default function EmployeeKanban({
             {members.map((employee) => (
               <Link
                 key={employee.id}
-                href={`/employees/${employee.id}`}
+                href={`/employees/${employee.employeeCode ?? employee.id}`}
                 className="block rounded-lg border border-zinc-200 bg-white p-3 shadow-sm transition hover:border-zinc-400 hover:shadow"
               >
                 <div className="flex items-start gap-3">

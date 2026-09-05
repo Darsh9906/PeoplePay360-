@@ -517,7 +517,7 @@ export default function EmployeeList() {
                   <TableRow key={emp.id} className="border-zinc-200 hover:bg-zinc-50">
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
-                        <Link href={`/employees/${emp.id}`} className="flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black">
+                        <Link href={`/employees/${emp.employeeCode ?? emp.id}`} className="flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black">
                           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-100 text-black font-bold text-xs border border-zinc-300">
                             {emp.firstName[0]}
                             {emp.lastName[0]}
@@ -549,7 +549,7 @@ export default function EmployeeList() {
                     <TableCell>
                       <Badge variant={badgeVariant}>{emp.status}</Badge>
                     </TableCell>
-                    <TableCell className="text-right"><Link href={`/employees/${emp.id}`} className="inline-flex h-7 items-center rounded-md px-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 hover:text-black">Open</Link></TableCell>
+                    <TableCell className="text-right"><Link href={`/employees/${emp.employeeCode ?? emp.id}`} className="inline-flex h-7 items-center rounded-md px-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 hover:text-black">Open</Link></TableCell>
                   </TableRow>
                 )
               })

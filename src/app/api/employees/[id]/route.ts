@@ -26,6 +26,15 @@ import {
 
 type Params = { params: Promise<{ id: string }> };
 
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function employeeIdentityFilter(value: string) {
+  return uuidPattern.test(value)
+    ? eq(employees.id, value)
+    : eq(employees.employeeCode, value);
+}
+
 const updateEmployeeSchema = z.object({
   employeeCode: z.string().min(1).optional(),
   firstName: z.string().min(1).optional(),
@@ -48,11 +57,6 @@ export async function GET(_request: Request, ctx: Params) {
       return access;
     }
 
-    // An employee may only open their own record.
-    if (access.scopeEmployeeId && access.scopeEmployeeId !== id) {
-      return forbidden("You can only view your own employee record");
-    }
-
     const employee = await db
       .select({
         id: employees.id,
@@ -73,12 +77,24 @@ export async function GET(_request: Request, ctx: Params) {
       })
       .from(employees)
       .innerJoin(departments, eq(employees.departmentId, departments.id))
-      .where(eq(employees.id, id))
+      .where(
+        and(
+          eq(employees.organizationId, access.organizationId),
+          employeeIdentityFilter(id),
+          access.scopeEmployeeId
+            ? eq(employees.id, access.scopeEmployeeId)
+            : undefined,
+        ),
+      )
       .limit(1);
 
     if (!employee[0]) {
-      return notFound("Employee not found");
+      return access.scopeEmployeeId
+        ? forbidden("You can only view your own employee record")
+        : notFound("Employee not found");
     }
+
+    const employeeId = employee[0].id;
 
     const [
       employeeContracts,
@@ -91,24 +107,24 @@ export async function GET(_request: Request, ctx: Params) {
         db
           .select()
           .from(contracts)
-          .where(eq(contracts.employeeId, id))
+          .where(eq(contracts.employeeId, employeeId))
           .orderBy(desc(contracts.startDate)),
         db
           .select()
           .from(attendanceRecords)
-          .where(eq(attendanceRecords.employeeId, id))
+          .where(eq(attendanceRecords.employeeId, employeeId))
           .orderBy(desc(attendanceRecords.attendanceDate))
           .limit(10),
         db
           .select()
           .from(timeOffRequests)
-          .where(eq(timeOffRequests.employeeId, id))
+          .where(eq(timeOffRequests.employeeId, employeeId))
           .orderBy(desc(timeOffRequests.startDate))
           .limit(10),
         db
           .select()
           .from(payslips)
-          .where(and(eq(payslips.employeeId, id)))
+          .where(eq(payslips.employeeId, employeeId))
           .orderBy(desc(payslips.id))
           .limit(10),
         db
@@ -129,7 +145,7 @@ export async function GET(_request: Request, ctx: Params) {
             timeOffTypes,
             eq(leaveAllocations.timeOffTypeId, timeOffTypes.id),
           )
-          .where(eq(leaveAllocations.employeeId, id))
+          .where(eq(leaveAllocations.employeeId, employeeId))
           .orderBy(asc(timeOffTypes.name)),
         db
           .select({
@@ -144,7 +160,7 @@ export async function GET(_request: Request, ctx: Params) {
             workingSchedules,
             eq(employeeWorkingSchedules.scheduleId, workingSchedules.id),
           )
-          .where(eq(employeeWorkingSchedules.employeeId, id))
+          .where(eq(employeeWorkingSchedules.employeeId, employeeId))
           .orderBy(desc(employeeWorkingSchedules.effectiveFrom)),
       ]);
 
@@ -167,10 +183,46 @@ export async function GET(_request: Request, ctx: Params) {
 export async function PATCH(request: Request, ctx: Params) {
   try {
     const { id } = await ctx.params;
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
+    if (access.user.role === "employee") {
+      return forbidden("Your role does not allow this action");
+    }
+
     const parsed = updateEmployeeSchema.safeParse(await request.json());
 
     if (!parsed.success) {
       return badRequest(parsed.error.issues[0]?.message ?? "Invalid request");
+    }
+
+    if (parsed.data.departmentId) {
+      const department = await db.query.departments.findFirst({
+        where: and(
+          eq(departments.id, parsed.data.departmentId),
+          eq(departments.organizationId, access.organizationId),
+        ),
+      });
+
+      if (!department) {
+        return badRequest("Selected department is not available");
+      }
+    }
+
+    if (parsed.data.managerId) {
+      const manager = await db.query.employees.findFirst({
+        where: and(
+          eq(employees.id, parsed.data.managerId),
+          eq(employees.organizationId, access.organizationId),
+        ),
+      });
+
+      if (!manager) {
+        return badRequest("Selected manager is not available");
+      }
     }
 
     const updateData = {
@@ -178,10 +230,26 @@ export async function PATCH(request: Request, ctx: Params) {
       workEmail: parsed.data.workEmail?.toLowerCase(),
     };
 
+    const existingEmployee = await db.query.employees.findFirst({
+      where: and(
+        eq(employees.organizationId, access.organizationId),
+        employeeIdentityFilter(id),
+      ),
+    });
+
+    if (!existingEmployee) {
+      return notFound("Employee not found");
+    }
+
     const [employee] = await db
       .update(employees)
       .set(updateData)
-      .where(eq(employees.id, id))
+      .where(
+        and(
+          eq(employees.id, existingEmployee.id),
+          eq(employees.organizationId, access.organizationId),
+        ),
+      )
       .returning();
 
     if (!employee) {
@@ -189,9 +257,10 @@ export async function PATCH(request: Request, ctx: Params) {
     }
 
     await writeAuditLog({
+      actorUserId: access.user.id,
       action: "update",
       entityType: "employee",
-      entityId: id,
+      entityId: employee.id,
       summary: `Updated employee ${employee.employeeCode}`,
     });
 
@@ -204,11 +273,40 @@ export async function PATCH(request: Request, ctx: Params) {
 export async function DELETE(_request: Request, ctx: Params) {
   try {
     const { id } = await ctx.params;
-    await db.delete(employees).where(eq(employees.id, id));
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
+    if (access.user.role === "employee") {
+      return forbidden("Your role does not allow this action");
+    }
+
+    const existingEmployee = await db.query.employees.findFirst({
+      where: and(
+        eq(employees.organizationId, access.organizationId),
+        employeeIdentityFilter(id),
+      ),
+    });
+
+    if (!existingEmployee) {
+      return notFound("Employee not found");
+    }
+
+    await db
+      .delete(employees)
+      .where(
+        and(
+          eq(employees.id, existingEmployee.id),
+          eq(employees.organizationId, access.organizationId),
+        ),
+      );
     await writeAuditLog({
+      actorUserId: access.user.id,
       action: "delete",
       entityType: "employee",
-      entityId: id,
+      entityId: existingEmployee.id,
       summary: "Deleted employee",
     });
     return noContent();

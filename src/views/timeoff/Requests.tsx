@@ -329,7 +329,7 @@ export default function Requests() {
                 >
                   <TableCell>
                     <Link
-                      href={`/employees/${request.employeeId}`}
+                      href={`/employees/${request.employeeCode ?? request.employeeId}`}
                       className="font-semibold text-black hover:underline"
                     >
                       {request.employeeName}
