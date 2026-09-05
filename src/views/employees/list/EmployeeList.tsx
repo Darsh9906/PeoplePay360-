@@ -3,7 +3,6 @@
 import { useState, useMemo } from "react"
 import Link from "next/link"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import * as XLSX from "xlsx"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -304,12 +303,7 @@ export default function EmployeeList() {
     }
     const reader = new FileReader()
     reader.onload = () => {
-      const workbook = file.name.toLowerCase().endsWith(".xlsx")
-        ? XLSX.read(reader.result, { type: "array" })
-        : null
-      const fileText = workbook
-        ? XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]])
-        : String(reader.result ?? "")
+      const fileText = String(reader.result ?? "")
       const [header, ...lines] = parseCsv(fileText)
       const indexes = new Map(header.map((name, index) => [name.toLowerCase(), index]))
       const valueAt = (values: string[], name: string) => values[indexes.get(name.toLowerCase()) ?? -1] ?? ""

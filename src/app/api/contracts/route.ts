@@ -79,13 +79,10 @@ export async function GET(request: Request) {
           eq(employees.organizationId, access.organizationId),
           access.scopeEmployeeId
             ? eq(contracts.employeeId, access.scopeEmployeeId)
-            : undefined,
+            : employeeId
+              ? eq(contracts.employeeId, employeeId)
+              : undefined,
         ),
-        access.scopeEmployeeId
-          ? eq(contracts.employeeId, access.scopeEmployeeId)
-          : employeeId
-            ? eq(contracts.employeeId, employeeId)
-            : undefined,
       )
       .orderBy(desc(contracts.startDate));
 
