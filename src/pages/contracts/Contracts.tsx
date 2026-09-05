@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
@@ -20,12 +20,79 @@ import {
 } from "@/src/data/mockData"
 import { Search, Filter, Calendar, FileText, XCircle } from "lucide-react"
 
+type ContractApiRow = {
+  id: string
+  employeeId: string
+  employeeName: string
+  contractType: string
+  salary: number
+  startDate: string
+  endDate: string
+  workingSchedule: string
+  displayStatus: "Running" | "Expired"
+}
+
+type ContractsApiResponse = {
+  data: ContractApiRow[]
+}
+
+function mapContractFromApi(contract: ContractApiRow): Contract {
+  return {
+    id: contract.id,
+    employeeId: contract.employeeId,
+    employeeName: contract.employeeName,
+    contractType: contract.contractType,
+    salary: contract.salary,
+    startDate: contract.startDate,
+    endDate: contract.endDate,
+    workingSchedule: contract.workingSchedule,
+    status: contract.displayStatus,
+  }
+}
+
 export default function Contracts() {
-  // Starts with NO dummy/fake contract records as requested
-  const [contracts] = useState<Contract[]>(INITIAL_CONTRACTS)
+  const [contracts, setContracts] = useState<Contract[]>(INITIAL_CONTRACTS)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("ALL")
   const [selectedContractType, setSelectedContractType] = useState("ALL")
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadContracts() {
+      try {
+        setIsLoading(true)
+        setLoadError("")
+
+        const response = await fetch("/api/contracts", {
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error("Unable to load contracts")
+        }
+
+        const payload = (await response.json()) as ContractsApiResponse
+        setContracts(payload.data.map(mapContractFromApi))
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return
+        }
+
+        setLoadError("Could not load contracts from backend.")
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadContracts()
+
+    return () => controller.abort()
+  }, [])
 
   const filteredContracts = useMemo(() => {
     return contracts.filter((contract) => {
@@ -130,7 +197,29 @@ export default function Contracts() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredContracts.length > 0 ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-40 text-center">
+                  <p className="text-sm font-medium text-zinc-500">
+                    Loading contract records...
+                  </p>
+                </TableCell>
+              </TableRow>
+            ) : loadError ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-40 text-center">
+                  <div className="flex flex-col items-center justify-center text-zinc-500 space-y-2 py-6">
+                    <XCircle className="h-10 w-10 text-zinc-300" />
+                    <p className="text-base font-semibold text-black">
+                      Backend data unavailable
+                    </p>
+                    <p className="text-xs text-zinc-500 max-w-sm">
+                      {loadError}
+                    </p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredContracts.length > 0 ? (
               filteredContracts.map((contract) => {
                 const badgeVariant =
                   contract.status === "Running" || contract.status === "Active"
