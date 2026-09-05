@@ -27,10 +27,10 @@ export default function Sidebar() {
     { label: "Dashboard", href: "/", icon: LayoutDashboard },
     { label: "Employees", href: "/employees", icon: Users, badge: "HR Ops" },
     { label: "Contracts", href: "/contracts", icon: FileText, badge: "HR Ops" },
-    { label: "Attendance", href: "#", icon: Clock, disabled: true },
+    { label: "Attendance", href: "/attendance", icon: Clock },
     { label: "Time Off", href: "#", icon: Calendar, disabled: true },
     { label: "Payroll", href: "#", icon: DollarSign, disabled: true },
-    { label: "Schedules", href: "#", icon: Briefcase, disabled: true },
+    { label: "Schedules", href: "/schedules", icon: Briefcase },
     { label: "User Management", href: "/users", icon: Users },
     { label: "Settings", href: "#", icon: Settings, disabled: true },
   ]
