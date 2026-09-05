@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { usePayroll, SalaryStructureRecord } from "@/src/context/PayrollContext"
+import { usePayroll } from "@/src/context/PayrollContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -22,7 +22,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Search, Filter, XCircle, ArrowLeft, Eye, Layers, ListChecks } from "lucide-react"
+import { Plus, Search, Filter, ArrowLeft, Eye, Layers, ListChecks } from "lucide-react"
 
 export default function SalaryStructures() {
   const { structures, addSalaryStructure } = usePayroll()
@@ -255,7 +255,7 @@ export default function SalaryStructures() {
                       No salary structures found
                     </p>
                     <p className="text-xs text-zinc-500 max-w-sm">
-                      There are no salary structures created yet. Click "Add Structure" to create a new compensation structure.
+                      There are no salary structures created yet. Click &quot;Add Structure&quot; to create a new compensation structure.
                     </p>
                   </div>
                 </TableCell>

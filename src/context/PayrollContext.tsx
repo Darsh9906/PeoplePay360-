@@ -120,7 +120,7 @@ const INITIAL_ANOMALIES: PayrollAnomalyRecord[] = []
 
 export function PayrollProvider({ children }: { children: React.ReactNode }) {
   const [payruns, setPayruns] = useState<PayrunRecord[]>(INITIAL_PAYRUNS)
-  const [payslips, setPayslips] = useState<PayslipRecord[]>(INITIAL_PAYSLIPS)
+  const [payslips] = useState<PayslipRecord[]>(INITIAL_PAYSLIPS)
   const [structures, setStructures] = useState<SalaryStructureRecord[]>(INITIAL_STRUCTURES)
   const [rules, setRules] = useState<SalaryRuleRecord[]>(INITIAL_RULES)
   const [anomalies, setAnomalies] = useState<PayrollAnomalyRecord[]>(INITIAL_ANOMALIES)

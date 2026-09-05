@@ -19,11 +19,9 @@ import {
   FileText,
   Clock,
   ArrowRight,
-  Plus,
   AlertCircle,
   CheckCircle2,
   XCircle,
-  TrendingUp,
 } from "lucide-react"
 
 export default function PayrollDashboard() {

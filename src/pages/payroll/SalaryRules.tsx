@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { usePayroll, SalaryRuleRecord } from "@/src/context/PayrollContext"
+import { usePayroll } from "@/src/context/PayrollContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -22,7 +22,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Search, Filter, XCircle, ArrowLeft, Eye, ListChecks, Layers } from "lucide-react"
+import { Plus, Search, Filter, ArrowLeft, Eye, ListChecks, Layers } from "lucide-react"
 
 export default function SalaryRules() {
   const { rules, structures, addSalaryRule } = usePayroll()
@@ -30,7 +30,7 @@ export default function SalaryRules() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("ALL")
   const [selectedStructure, setSelectedStructure] = useState("ALL")
-  const [selectedStatus, setSelectedStatus] = useState("ALL")
+  const [selectedStatus] = useState("ALL")
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   // Form State for Add Rule
@@ -308,7 +308,7 @@ export default function SalaryRules() {
                       No salary rules found
                     </p>
                     <p className="text-xs text-zinc-500 max-w-sm">
-                      There are no salary rules created yet. Click "Add Salary Rule" to define calculation rules.
+                      There are no salary rules created yet. Click &quot;Add Salary Rule&quot; to define calculation rules.
                     </p>
                   </div>
                 </TableCell>

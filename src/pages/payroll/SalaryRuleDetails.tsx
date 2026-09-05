@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePayroll } from "@/src/context/PayrollContext"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, ListChecks, Layers, XCircle } from "lucide-react"
+import { ArrowLeft, Layers, XCircle } from "lucide-react"
 
 interface RuleDetailsProps {
   id?: string

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { usePayroll, PayslipRecord } from "@/src/context/PayrollContext"
+import { usePayroll } from "@/src/context/PayrollContext"
 import { formatINR } from "@/src/data/mockData"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,11 +19,9 @@ import {
 import {
   Search,
   Filter,
-  XCircle,
   ArrowLeft,
   FileText,
   Eye,
-  Calendar,
   User,
 } from "lucide-react"
 

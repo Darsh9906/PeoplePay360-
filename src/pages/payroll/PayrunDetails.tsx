@@ -21,8 +21,6 @@ import {
   Play,
   Check,
   DollarSign,
-  AlertCircle,
-  FileCheck,
   XCircle,
 } from "lucide-react"
 

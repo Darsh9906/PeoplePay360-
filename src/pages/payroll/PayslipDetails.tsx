@@ -2,18 +2,10 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { usePayroll, PayslipRecord } from "@/src/context/PayrollContext"
+import { usePayroll } from "@/src/context/PayrollContext"
 import { formatINR } from "@/src/data/mockData"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table"
 import {
   Dialog,
   DialogHeader,
@@ -23,14 +15,8 @@ import {
 } from "@/components/ui/dialog"
 import {
   ArrowLeft,
-  FileText,
   HelpCircle,
   XCircle,
-  User,
-  Calendar,
-  Briefcase,
-  DollarSign,
-  CheckCircle2,
 } from "lucide-react"
 
 interface PayslipDetailsProps {
@@ -233,7 +219,7 @@ export default function PayslipDetails({ id }: PayslipDetailsProps) {
             <div className="p-3 bg-zinc-50 border border-zinc-300 rounded-md space-y-1.5">
               <div className="font-bold text-black text-xs">Allowances</div>
               <p className="text-zinc-600 leading-relaxed">
-                Additional benefits and stipends attached to the employee's salary structure.
+                Additional benefits and stipends attached to the employee&apos;s salary structure.
                 Totaling <span className="font-semibold text-black">+{formatINR(payslip.allowances)}</span>.
               </p>
             </div>

@@ -27,7 +27,6 @@ import {
   ShieldCheck,
   AlertTriangle,
   CheckCircle2,
-  XCircle,
   Search,
   Filter,
   RefreshCw,

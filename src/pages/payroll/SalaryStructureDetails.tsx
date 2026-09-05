@@ -13,7 +13,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table"
-import { ArrowLeft, Layers, ListChecks, XCircle, Plus } from "lucide-react"
+import { ArrowLeft, ListChecks, XCircle } from "lucide-react"
 
 interface StructureDetailsProps {
   id?: string
@@ -184,7 +184,7 @@ export default function SalaryStructureDetails({ id }: StructureDetailsProps) {
                         No associated salary rules
                       </p>
                       <p className="text-xs text-zinc-500 max-w-sm">
-                        There are no salary rules attached to this structure yet. Click "Manage Salary Rules" to define calculation rules.
+                        There are no salary rules attached to this structure yet. Click &quot;Manage Salary Rules&quot; to define calculation rules.
                       </p>
                     </div>
                   </TableCell>

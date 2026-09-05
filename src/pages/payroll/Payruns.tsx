@@ -23,7 +23,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Search, Filter, XCircle, ArrowLeft, ArrowRight } from "lucide-react"
+import { Plus, Search, Filter, XCircle } from "lucide-react"
 
 export default function Payruns() {
   const { payruns, addPayrun } = usePayroll()
@@ -90,7 +90,7 @@ export default function Payruns() {
     e.preventDefault()
     if (!validateForm()) return
 
-    const created = addPayrun({
+    addPayrun({
       name: formData.name.trim(),
       period: formData.period.trim(),
       salaryStructure: formData.salaryStructure,
@@ -275,7 +275,7 @@ export default function Payruns() {
                       No payruns found
                     </p>
                     <p className="text-xs text-zinc-500 max-w-sm">
-                      There are no payrun records matching your criteria. Click "New Payrun" to initialize a new payroll run.
+                      There are no payrun records matching your criteria. Click &quot;New Payrun&quot; to initialize a new payroll run.
                     </p>
                   </div>
                 </TableCell>
