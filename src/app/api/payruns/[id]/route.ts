@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   employees,
@@ -6,7 +6,7 @@ import {
   payslipLines,
   payslips,
 } from "@/db/schema";
-import { isResponse, requireRole } from "../../_lib/access";
+import { NO_MATCH, isResponse, requireRole } from "../../_lib/access";
 import { writeAuditLog } from "../../_lib/audit";
 import {
   badRequest,
@@ -33,7 +33,10 @@ export async function GET(_request: Request, ctx: Params) {
     const { id } = await ctx.params;
 
     const payrun = await db.query.payruns.findFirst({
-      where: eq(payruns.id, id),
+      where: and(
+        eq(payruns.id, id),
+        eq(payruns.organizationId, actor.organizationId ?? NO_MATCH),
+      ),
       with: {
         salaryStructure: true,
         employees: {
@@ -108,7 +111,10 @@ export async function DELETE(_request: Request, ctx: Params) {
     const { id } = await ctx.params;
 
     const payrun = await db.query.payruns.findFirst({
-      where: eq(payruns.id, id),
+      where: and(
+        eq(payruns.id, id),
+        eq(payruns.organizationId, actor.organizationId ?? NO_MATCH),
+      ),
     });
 
     if (!payrun) {

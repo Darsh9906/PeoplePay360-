@@ -44,6 +44,7 @@ export async function GET() {
     }
 
     const rows = await db.query.salaryStructures.findMany({
+      where: eq(salaryStructures.organizationId, reader.organizationId ?? NO_MATCH),
       with: { rules: true },
       orderBy: asc(salaryStructures.name),
     });
@@ -93,6 +94,7 @@ export async function POST(request: Request) {
     }
 
     await writeAuditLog({
+      actorUserId: actor.id,
       action: "create",
       entityType: "salary_structure",
       entityId: structure.id,

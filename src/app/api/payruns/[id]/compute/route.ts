@@ -16,7 +16,7 @@ export async function POST(_request: Request, ctx: Params) {
       return actor;
     }
     const { id } = await ctx.params;
-    const result = await computePayrun(id);
+    const result = await computePayrun(id, actor.organizationId);
 
     if (!result) {
       return notFound("Payrun not found");

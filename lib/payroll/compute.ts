@@ -13,6 +13,7 @@ import {
   payslipLines,
   payslips,
   salaryRules,
+  statutorySettings,
   timeOffRequests,
   timeOffTypes,
   workingScheduleLines,
@@ -73,13 +74,26 @@ function defaultExpectedDays(periodStart: string, periodEnd: string) {
 }
 
 /** The rule set every payrun falls back to when no structure is configured. */
-function defaultLines(wage: number): SalaryLine[] {
+type StatutoryRateMap = Map<string, { rate: number | null; fixedAmount: number | null }>;
+
+function statutoryRate(settings: StatutoryRateMap, code: string, fallback: number) {
+  return Number(settings.get(code)?.rate ?? fallback);
+}
+
+function statutoryFixed(settings: StatutoryRateMap, code: string, fallback: number) {
+  return Number(settings.get(code)?.fixedAmount ?? fallback);
+}
+
+function defaultLines(wage: number, settings: StatutoryRateMap): SalaryLine[] {
   const basic = wage * 0.5;
   const hra = wage * 0.2;
   const special = wage - basic - hra;
   const gross = basic + hra + special;
-  const pf = basic * 0.12;
-  const professionalTax = 200;
+  const pfEmployeeRate = statutoryRate(settings, "PF_EMPLOYEE", 12);
+  const pfWageLimit = statutoryFixed(settings, "PF_WAGE_LIMIT", 15000);
+  const professionalTax = statutoryFixed(settings, "PROFESSIONAL_TAX", 200);
+  const pfBase = pfWageLimit > 0 ? Math.min(basic, pfWageLimit) : basic;
+  const pf = pfBase * (pfEmployeeRate / 100);
 
   return [
     { name: "Basic Salary", code: "BASIC", category: "basic", sequence: 10, amount: basic },
@@ -92,9 +106,11 @@ function defaultLines(wage: number): SalaryLine[] {
   ];
 }
 
-export async function computePayrun(payrunId: string) {
+export async function computePayrun(payrunId: string, organizationId?: string | null) {
   const payrun = await db.query.payruns.findFirst({
-    where: eq(payruns.id, payrunId),
+    where: organizationId
+      ? and(eq(payruns.id, payrunId), eq(payruns.organizationId, organizationId))
+      : eq(payruns.id, payrunId),
   });
 
   if (!payrun) {
@@ -113,7 +129,12 @@ export async function computePayrun(payrunId: string) {
     const activeEmployees = await db
       .select({ id: employees.id })
       .from(employees)
-      .where(eq(employees.status, "active"));
+      .where(
+        and(
+          eq(employees.status, "active"),
+          organizationId ? eq(employees.organizationId, organizationId) : undefined,
+        ),
+      );
 
     employeeIds = activeEmployees.map((row) => row.id);
 
@@ -150,6 +171,32 @@ export async function computePayrun(payrunId: string) {
         .where(eq(salaryRules.structureId, payrun.salaryStructureId))
         .orderBy(asc(salaryRules.sequence))
     : [];
+
+  const statutoryRows = payrun.organizationId
+    ? await db
+        .select({
+          code: statutorySettings.code,
+          rate: statutorySettings.rate,
+          fixedAmount: statutorySettings.fixedAmount,
+        })
+        .from(statutorySettings)
+        .where(
+          and(
+            eq(statutorySettings.organizationId, payrun.organizationId),
+            eq(statutorySettings.isActive, true),
+          ),
+        )
+    : [];
+
+  const statutory = new Map(
+    statutoryRows.map((row) => [
+      row.code,
+      {
+        rate: row.rate === null ? null : Number(row.rate),
+        fixedAmount: row.fixedAmount === null ? null : Number(row.fixedAmount),
+      },
+    ]),
+  );
 
   const warnings: Warning[] = [];
   const results = [];
@@ -353,7 +400,7 @@ export async function computePayrun(payrunId: string) {
     }
 
     if (lines.length === 0) {
-      lines = defaultLines(wage);
+      lines = defaultLines(wage, statutory);
     }
 
     const grossPay = lines

@@ -11,6 +11,7 @@
     "db:migrate": "node --env-file=.env --experimental-strip-types scripts/apply-migrations.mts",
     "db:push": "drizzle-kit push",
     "db:reset": "node --env-file=.env --experimental-strip-types scripts/reset-db.mts",
+    "db:seed:payroll": "node --env-file=.env --experimental-strip-types scripts/seed-payroll-demo.mts",
     "test:e2e": "node --env-file=.env --experimental-strip-types scripts/e2e.mts"
   },
   "dependencies": {

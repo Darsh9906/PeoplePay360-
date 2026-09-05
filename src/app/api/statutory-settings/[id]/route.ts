@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { statutorySettings } from "@/db/schema";
 import { writeAuditLog } from "../../_lib/audit";
+import { NO_MATCH, isResponse, requireRole } from "../../_lib/access";
 import { badRequest, noContent, notFound, ok, serverError } from "../../_lib/responses";
 
 type Params = { params: Promise<{ id: string }> };
@@ -20,9 +21,18 @@ const updateStatutorySchema = z.object({
 
 export async function GET(_request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
     const setting = await db.query.statutorySettings.findFirst({
-      where: eq(statutorySettings.id, id),
+      where: and(
+        eq(statutorySettings.id, id),
+        eq(statutorySettings.organizationId, actor.organizationId ?? NO_MATCH),
+      ),
     });
 
     if (!setting) {
@@ -37,6 +47,12 @@ export async function GET(_request: Request, ctx: Params) {
 
 export async function PATCH(request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
     const parsed = updateStatutorySchema.safeParse(await request.json());
 
@@ -51,7 +67,12 @@ export async function PATCH(request: Request, ctx: Params) {
         rate: parsed.data.rate?.toFixed(2),
         fixedAmount: parsed.data.fixedAmount?.toFixed(2),
       })
-      .where(eq(statutorySettings.id, id))
+      .where(
+        and(
+          eq(statutorySettings.id, id),
+          eq(statutorySettings.organizationId, actor.organizationId ?? NO_MATCH),
+        ),
+      )
       .returning();
 
     if (!setting) {
@@ -59,6 +80,7 @@ export async function PATCH(request: Request, ctx: Params) {
     }
 
     await writeAuditLog({
+      actorUserId: actor.id,
       action: "update",
       entityType: "statutory_setting",
       entityId: id,
@@ -73,9 +95,23 @@ export async function PATCH(request: Request, ctx: Params) {
 
 export async function DELETE(_request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
-    await db.delete(statutorySettings).where(eq(statutorySettings.id, id));
+    await db
+      .delete(statutorySettings)
+      .where(
+        and(
+          eq(statutorySettings.id, id),
+          eq(statutorySettings.organizationId, actor.organizationId ?? NO_MATCH),
+        ),
+      );
     await writeAuditLog({
+      actorUserId: actor.id,
       action: "delete",
       entityType: "statutory_setting",
       entityId: id,

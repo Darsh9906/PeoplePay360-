@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { statutorySettings } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
-import { isResponse, resolveAccess } from "../_lib/access";
+import { isResponse, NO_MATCH, requireRole } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const statutorySchema = z.object({
@@ -19,7 +19,7 @@ const statutorySchema = z.object({
 
 export async function GET() {
   try {
-    const access = await resolveAccess();
+    const access = await requireRole(["payroll_manager", "admin"]);
 
     if (isResponse(access)) {
       return access;
@@ -28,7 +28,7 @@ export async function GET() {
     const rows = await db
       .select()
       .from(statutorySettings)
-      .where(eq(statutorySettings.organizationId, access.organizationId))
+      .where(eq(statutorySettings.organizationId, access.organizationId ?? NO_MATCH))
       .orderBy(asc(statutorySettings.component));
 
     return ok(rows);
@@ -39,7 +39,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const access = await resolveAccess();
+    const access = await requireRole(["payroll_manager", "admin"]);
 
     if (isResponse(access)) {
       return access;
@@ -62,6 +62,7 @@ export async function POST(request: Request) {
       .returning();
 
     await writeAuditLog({
+      actorUserId: access.id,
       action: "create",
       entityType: "statutory_setting",
       entityId: setting.id,
