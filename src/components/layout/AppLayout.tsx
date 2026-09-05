@@ -7,6 +7,8 @@ import { AuthProvider } from "@/src/context/AuthContext"
 import Sidebar from "./Sidebar"
 import Navbar from "./Navbar"
 
+import { PayrollProvider } from "@/src/context/PayrollContext"
+
 function LayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const app = useApp()
@@ -33,7 +35,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
       <AppProvider>
-        <LayoutInner>{children}</LayoutInner>
+        <PayrollProvider>
+          <LayoutInner>{children}</LayoutInner>
+        </PayrollProvider>
       </AppProvider>
     </AuthProvider>
   )
