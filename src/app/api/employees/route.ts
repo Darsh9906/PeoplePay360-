@@ -1,7 +1,7 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { departments, employees } from "@/db/schema";
+import { departments, employees, employeeWorkingSchedules, workingSchedules } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
 import { isResponse, resolveAccess } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
@@ -37,6 +37,18 @@ export async function GET() {
         status: employees.status,
         hireDate: employees.hireDate,
         department: departments.name,
+        managerName: sql<string | null>`(
+          select concat(m.first_name, ' ', m.last_name)
+          from ${employees} m where m.id = ${employees.managerId}
+        )`,
+        scheduleName: sql<string | null>`(
+          select ${workingSchedules.name}
+          from ${employeeWorkingSchedules}
+          inner join ${workingSchedules} on ${workingSchedules.id} = ${employeeWorkingSchedules.scheduleId}
+          where ${employeeWorkingSchedules.employeeId} = ${employees.id}
+          order by ${employeeWorkingSchedules.effectiveFrom} desc
+          limit 1
+        )`,
       })
       .from(employees)
       .innerJoin(departments, eq(employees.departmentId, departments.id))

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
@@ -48,6 +49,8 @@ function mapContractFromApi(contract: ContractApiRow): Contract {
 }
 
 export default function Contracts() {
+  const searchParams = useSearchParams()
+  const employeeId = searchParams.get("employeeId")
   const [contracts, setContracts] = useState<Contract[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("ALL")
@@ -63,7 +66,7 @@ export default function Contracts() {
         setIsLoading(true)
         setLoadError("")
 
-        const response = await fetch("/api/contracts", {
+        const response = await fetch(employeeId ? `/api/contracts?employeeId=${encodeURIComponent(employeeId)}` : "/api/contracts", {
           signal: controller.signal,
         })
 
@@ -89,7 +92,7 @@ export default function Contracts() {
     loadContracts()
 
     return () => controller.abort()
-  }, [])
+  }, [employeeId])
 
   const filteredContracts = useMemo(() => {
     return contracts.filter((contract) => {

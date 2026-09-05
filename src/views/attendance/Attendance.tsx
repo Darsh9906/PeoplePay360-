@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -108,6 +109,8 @@ function mapAttendance(record: BackendAttendanceRecord): AttendanceRecord {
 }
 
 export default function Attendance() {
+  const searchParams = useSearchParams()
+  const employeeIdFilter = searchParams.get("employeeId")
   const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState("")
   const [filterDate, setFilterDate] = useState("")
@@ -130,7 +133,7 @@ export default function Attendance() {
 
   const attendanceQuery = useQuery({
     queryKey: ["attendance"],
-    queryFn: () => apiRequest<BackendAttendanceRecord[]>("/api/attendance"),
+    queryFn: () => apiRequest<BackendAttendanceRecord[]>(employeeIdFilter ? `/api/attendance?employeeId=${encodeURIComponent(employeeIdFilter)}` : "/api/attendance"),
   })
   const employeesQuery = useQuery({
     queryKey: ["employees"],

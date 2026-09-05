@@ -11,6 +11,9 @@ export interface Employee {
   department: string
   position: string
   status: EmployeeStatus
+  hireDate?: string
+  managerName?: string | null
+  scheduleName?: string | null
 }
 
 export type ContractStatus =
