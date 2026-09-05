@@ -1,14 +1,18 @@
 "use client"
 
 import React from "react"
+import { usePathname } from "next/navigation"
 import { AppProvider, useApp } from "@/src/context/AppContext"
 import { AuthProvider } from "@/src/context/AuthContext"
 import Sidebar from "./Sidebar"
 import Navbar from "./Navbar"
 
 function LayoutInner({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
   const app = useApp()
   const sidebarOpen = app?.sidebarOpen ?? true
+
+  if (pathname === "/login") return <>{children}</>
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-foreground flex flex-col">
