@@ -127,6 +127,14 @@ export default function PayrunDetails({ id }: PayrunDetailsProps) {
 
         {/* Workflow Execution Action Button */}
         <div className="flex items-center gap-2">
+          <Link href="/payroll/payslips">
+            <Button
+              variant="outline"
+              className="border-zinc-300 text-black hover:bg-zinc-100 font-medium text-xs"
+            >
+              View Payslips
+            </Button>
+          </Link>
           <Link href="/payroll/health">
             <Button
               variant="outline"

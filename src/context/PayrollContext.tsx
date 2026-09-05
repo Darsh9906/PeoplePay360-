@@ -22,20 +22,45 @@ export interface PayrunRecord {
   }>
 }
 
+export interface PayslipRecord {
+  id: string
+  employeeId: string
+  employeeName: string
+  department: string
+  payrunId: string
+  payrunName: string
+  payPeriod: string
+  salaryStructure: string
+  contractType: string
+  workedDays: number
+  leaveDays: number
+  basicSalary: number
+  allowances: number
+  grossSalary: number
+  deductions: number
+  netSalary: number
+  status: "Draft" | "Generated" | "Paid"
+  issuedDate: string
+}
+
 interface PayrollContextType {
   payruns: PayrunRecord[]
+  payslips: PayslipRecord[]
   addPayrun: (payrun: Omit<PayrunRecord, "id" | "createdAt" | "totalAmount" | "status">) => PayrunRecord
   updatePayrunStatus: (id: string, newStatus: PayrunRecord["status"]) => void
   getPayrunById: (id: string) => PayrunRecord | undefined
+  getPayslipById: (id: string) => PayslipRecord | undefined
 }
 
 const PayrollContext = createContext<PayrollContextType | null>(null)
 
-// Initial payruns state is strictly empty — NO dummy or fake records
+// Initial state is strictly empty — NO dummy or fake records
 const INITIAL_PAYRUNS: PayrunRecord[] = []
+const INITIAL_PAYSLIPS: PayslipRecord[] = []
 
 export function PayrollProvider({ children }: { children: React.ReactNode }) {
   const [payruns, setPayruns] = useState<PayrunRecord[]>(INITIAL_PAYRUNS)
+  const [payslips, setPayslips] = useState<PayslipRecord[]>(INITIAL_PAYSLIPS)
 
   const addPayrun = (
     data: Omit<PayrunRecord, "id" | "createdAt" | "totalAmount" | "status">
@@ -57,7 +82,6 @@ export function PayrollProvider({ children }: { children: React.ReactNode }) {
     setPayruns((prev) =>
       prev.map((pr) => {
         if (pr.id !== id) return pr
-
         return {
           ...pr,
           status: newStatus,
@@ -70,13 +94,19 @@ export function PayrollProvider({ children }: { children: React.ReactNode }) {
     return payruns.find((pr) => pr.id === id)
   }
 
+  const getPayslipById = (id: string) => {
+    return payslips.find((ps) => ps.id === id)
+  }
+
   return (
     <PayrollContext.Provider
       value={{
         payruns,
+        payslips,
         addPayrun,
         updatePayrunStatus,
         getPayrunById,
+        getPayslipById,
       }}
     >
       {children}
@@ -89,6 +119,7 @@ export function usePayroll() {
   if (!context) {
     return {
       payruns: [],
+      payslips: [],
       addPayrun: () => ({
         id: "",
         name: "",
@@ -101,6 +132,7 @@ export function usePayroll() {
       }),
       updatePayrunStatus: () => {},
       getPayrunById: () => undefined,
+      getPayslipById: () => undefined,
     }
   }
   return context
