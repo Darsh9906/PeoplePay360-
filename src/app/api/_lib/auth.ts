@@ -14,6 +14,22 @@ export function createToken() {
   return randomBytes(32).toString("base64url");
 }
 
+// Ambiguous characters (0/O, 1/l/I) are omitted so a temporary password can be typed.
+const tempPasswordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+
+/** Temporary password shown to an admin for a user they just created. */
+export function generateTempPassword(length = 12) {
+  const bytes = randomBytes(length);
+  let password = "";
+
+  for (let index = 0; index < length; index += 1) {
+    password += tempPasswordAlphabet[bytes[index] % tempPasswordAlphabet.length];
+  }
+
+  // Guarantee the mix most password policies expect.
+  return `${password.slice(0, -2)}${randomBytes(1)[0] % 10}!`;
+}
+
 export function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }

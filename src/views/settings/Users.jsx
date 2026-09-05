@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiRequest } from "@/src/lib/api"
-import { Check, ChevronRight, Plus, Search, UserRound, X } from "lucide-react"
+import { useAuth } from "@/src/context/AuthContext"
+import { Check, ChevronRight, KeyRound, Plus, Search, UserRound, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -33,7 +34,7 @@ const statuses = [
   { label: "Suspended", value: "suspended" },
 ]
 
-const emptyForm = { employeeId: "", email: "", role: "employee", status: "invited" }
+const emptyForm = { name: "", email: "", role: "employee", status: "active" }
 
 function roleLabel(value) {
   return roles.find((role) => role.value === value)?.label ?? value
@@ -54,26 +55,53 @@ function initials(name) {
 
 export default function Users() {
   const queryClient = useQueryClient()
+  const { user: currentUser } = useAuth()
   const [selectedId, setSelectedId] = useState(null)
   const [formVisible, setFormVisible] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("All roles")
+  const [tempPassword, setTempPassword] = useState(null)
+  const [copied, setCopied] = useState("")
+
+  const copyToClipboard = async (value, field) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(field)
+      setTimeout(() => setCopied(""), 1500)
+    } catch {
+      // Clipboard access can be blocked; the value is selectable as a fallback.
+    }
+  }
   const [errors, setErrors] = useState({})
   const [feedback, setFeedback] = useState("")
+  const organizationDomain = currentUser?.email?.split("@")[1] ?? "your company domain"
 
   const usersQuery = useQuery({
     queryKey: ["users"],
     queryFn: () => apiRequest("/api/users"),
   })
 
-  const employeesQuery = useQuery({
-    queryKey: ["employees"],
-    queryFn: () => apiRequest("/api/employees"),
-  })
-
   const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data])
-  const employees = useMemo(() => employeesQuery.data ?? [], [employeesQuery.data])
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: (user) =>
+      apiRequest(`/api/users/${user.id}/reset-password`, { method: "POST" }),
+    onSuccess: (result) => {
+      setFormVisible(false)
+      setFeedback("")
+      setErrors({})
+      setTempPassword({
+        name: result.name,
+        email: result.email,
+        password: result.tempPassword,
+        reset: true,
+      })
+      queryClient.invalidateQueries({ queryKey: ["users"] })
+    },
+    onError: (error) =>
+      setErrors({ form: error instanceof Error ? error.message : "Could not reset the password." }),
+  })
 
   const saveUserMutation = useMutation({
     mutationFn: ({ id, payload }) => {
@@ -99,7 +127,7 @@ export default function Users() {
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase()
     return users.filter((user) => {
-      const values = [user.name, user.employeeName, user.email].filter(Boolean)
+      const values = [user.name, user.email].filter(Boolean)
       const matchesSearch = !query || values.some((value) => value.toLowerCase().includes(query))
       const matchesRole = roleFilter === "All roles" || user.role === roleFilter
       return matchesSearch && matchesRole
@@ -112,19 +140,21 @@ export default function Users() {
     setForm(emptyForm)
     setErrors({})
     setFeedback("")
+    setTempPassword(null)
   }
 
   const selectUser = (user) => {
     setFormVisible(true)
     setSelectedId(user.id)
     setForm({
-      employeeId: user.employeeId ?? "",
+      name: user.name ?? "",
       email: user.email,
       role: user.role,
       status: user.status,
     })
     setErrors({})
     setFeedback("")
+    setTempPassword(null)
   }
 
   const closeForm = () => {
@@ -133,6 +163,7 @@ export default function Users() {
     setForm(emptyForm)
     setErrors({})
     setFeedback("")
+    setTempPassword(null)
   }
 
   const updateField = (field, value) => {
@@ -144,27 +175,36 @@ export default function Users() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     const nextErrors = {}
-    if (!form.employeeId) nextErrors.employeeId = "Employee is required."
+    if (!form.name.trim()) nextErrors.name = "Full name is required."
     if (!form.email.trim()) nextErrors.email = "Work email is required."
     else if (!/^\S+@\S+\.\S+$/.test(form.email)) nextErrors.email = "Enter a valid work email."
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) return
 
-    const employee = employees.find((item) => item.id === form.employeeId)
 
     try {
-      await saveUserMutation.mutateAsync({
+      const result = await saveUserMutation.mutateAsync({
         id: selectedId,
         payload: {
-          name: employee?.fullName ?? employee?.employeeName ?? form.email.trim(),
+          name: form.name.trim(),
           email: form.email.trim(),
           role: form.role,
           status: form.status,
-          employeeId: form.employeeId,
         },
       })
 
-      setFeedback(selectedId ? "User access updated." : "User invite created.")
+      if (selectedId) {
+        setFeedback("User access updated.")
+      } else if (result?.tempPassword) {
+        setTempPassword({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          password: result.tempPassword,
+          reset: false,
+        })
+        setFeedback("")
+      }
+
       setSelectedId(null)
       setForm(emptyForm)
     } catch (error) {
@@ -195,7 +235,7 @@ export default function Users() {
           <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 sm:flex-row">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users, employees or email" className="border-zinc-300 bg-white pl-9 text-black placeholder:text-zinc-400 focus-visible:ring-black" />
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users by name or email" className="border-zinc-300 bg-white pl-9 text-black placeholder:text-zinc-400 focus-visible:ring-black" />
             </div>
             <Select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} className="w-full border-zinc-300 bg-white text-black sm:w-44">
               <option>All roles</option>
@@ -203,13 +243,13 @@ export default function Users() {
             </Select>
           </div>
 
-          {(usersQuery.isLoading || employeesQuery.isLoading) && (
+          {usersQuery.isLoading && (
             <p className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-500">
               Loading user access data...
             </p>
           )}
 
-          {(usersQuery.error || employeesQuery.error || errors.form) && (
+          {(usersQuery.error || errors.form) && (
             <p className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700">
               {errors.form || "Could not load user management data."}
             </p>
@@ -221,7 +261,6 @@ export default function Users() {
                 <TableHeader>
                   <TableRow className="border-zinc-200 bg-zinc-50 hover:bg-zinc-50">
                     <TableHead className="text-zinc-600">User</TableHead>
-                    <TableHead className="text-zinc-600">Employee</TableHead>
                     <TableHead className="text-zinc-600">Work Email</TableHead>
                     <TableHead className="text-zinc-600">Role</TableHead>
                     <TableHead className="text-zinc-600">Status</TableHead>
@@ -232,14 +271,31 @@ export default function Users() {
                   {filteredUsers.length > 0 ? filteredUsers.map((user) => (
                     <TableRow key={user.id} data-state={selectedId === user.id ? "selected" : undefined} className={`cursor-pointer border-zinc-200 text-zinc-600 hover:bg-zinc-50 ${selectedId === user.id ? "bg-zinc-100 ring-1 ring-inset ring-black/20" : "bg-white"}`} onClick={() => selectUser(user)}>
                       <TableCell><div className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-md bg-black text-xs font-semibold text-white">{initials(user.name)}</span><span className="font-medium text-black">{user.name}</span></div></TableCell>
-                      <TableCell className="text-zinc-600">{user.employeeName ?? "-"}</TableCell>
                       <TableCell className="text-zinc-600">{user.email}</TableCell>
                       <TableCell><Badge className="border-zinc-300 bg-zinc-100 text-zinc-700">{roleLabel(user.role)}</Badge></TableCell>
                       <TableCell><Badge className={user.status === "active" ? "border-black bg-black text-white" : "border-zinc-300 bg-zinc-100 text-zinc-500"}>{statusLabel(user.status)}</Badge></TableCell>
-                      <TableCell className="text-right"><ChevronRight className="ml-auto h-4 w-4 text-zinc-400" /></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs"
+                            title="Issue a new temporary password"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              resetPasswordMutation.mutate(user)
+                            }}
+                          >
+                            <KeyRound className="h-3.5 w-3.5" />
+                            Reset password
+                          </Button>
+                          <ChevronRight className="h-4 w-4 text-zinc-400" />
+                        </div>
+                      </TableCell>
                     </TableRow>
                   )) : (
-                    <TableRow className="border-zinc-200 hover:bg-white"><TableCell colSpan={6} className="h-56 text-center"><div className="flex flex-col items-center justify-center space-y-2 py-6 text-zinc-500"><UserRound className="h-10 w-10 text-zinc-300" /><p className="text-base font-semibold text-black">No users found</p><p className="max-w-sm text-xs text-zinc-500">There are no user records to display. Use the &quot;New User&quot; button above to add a user.</p></div></TableCell></TableRow>
+                    <TableRow className="border-zinc-200 hover:bg-white"><TableCell colSpan={5} className="h-56 text-center"><div className="flex flex-col items-center justify-center space-y-2 py-6 text-zinc-500"><UserRound className="h-10 w-10 text-zinc-300" /><p className="text-base font-semibold text-black">No users found</p><p className="max-w-sm text-xs text-zinc-500">There are no user records to display. Use the &quot;New User&quot; button above to add a user.</p></div></TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -253,11 +309,80 @@ export default function Users() {
           </CardHeader>
           <CardContent className="p-5">
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <div className="space-y-2"><label className="text-xs font-medium text-zinc-700" htmlFor="user-employee">Employee</label><Select id="user-employee" value={form.employeeId} onChange={(event) => updateField("employeeId", event.target.value)} className="border-zinc-300 bg-white text-black"><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName} · {employee.workEmail}</option>)}</Select>{errors.employeeId && <p className="text-xs text-zinc-600">{errors.employeeId}</p>}</div>
-              <div className="space-y-2"><label className="text-xs font-medium text-zinc-700" htmlFor="user-email">Work Email</label><Input id="user-email" type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} placeholder="name@company.com" className="border-zinc-300 bg-white text-black placeholder:text-zinc-400 focus-visible:ring-black" />{errors.email && <p className="text-xs text-zinc-600">{errors.email}</p>}</div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-zinc-700" htmlFor="user-name">Full Name</label>
+                <Input
+                  id="user-name"
+                  value={form.name}
+                  onChange={(event) => updateField("name", event.target.value)}
+                  placeholder="e.g. Priya Sharma"
+                  className="border-zinc-300 bg-white text-black placeholder:text-zinc-400"
+                />
+                {errors.name && <p className="text-xs text-zinc-600">{errors.name}</p>}
+              </div>
+              <div className="space-y-2"><label className="text-xs font-medium text-zinc-700" htmlFor="user-email">Work Email</label><Input id="user-email" type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} placeholder={`name@${organizationDomain}`} className="border-zinc-300 bg-white text-black placeholder:text-zinc-400 focus-visible:ring-black" />{errors.email ? <p className="text-xs text-zinc-600">{errors.email}</p> : <p className="text-[11px] text-zinc-500">Use an address from {organizationDomain}.</p>}</div>
               <div className="space-y-2"><label className="text-xs font-medium text-zinc-700" htmlFor="user-role">Role</label><Select id="user-role" value={form.role} onChange={(event) => updateField("role", event.target.value)} className="border-zinc-300 bg-white text-black">{roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</Select></div>
               <div className="space-y-2"><label className="text-xs font-medium text-zinc-700" htmlFor="user-status">Account Status</label><Select id="user-status" value={form.status} onChange={(event) => updateField("status", event.target.value)} className="border-zinc-300 bg-white text-black">{statuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</Select></div>
               {feedback && <p className="flex items-center gap-2 rounded-md border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-700"><Check className="h-4 w-4" />{feedback}</p>}
+              {tempPassword && (
+                <div className="rounded-md border border-black bg-zinc-50 px-3 py-3 text-xs">
+                  <p className="font-semibold text-black">
+                    {tempPassword.reset
+                      ? `New password for ${tempPassword.name}`
+                      : `Account created for ${tempPassword.name}`}
+                  </p>
+                  <p className="mt-1 text-zinc-600">
+                    Share these sign-in details. They will be asked to choose
+                    their own password the first time they sign in.
+                  </p>
+                  <div className="mt-2 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 rounded border border-zinc-300 bg-white px-2 py-1.5">
+                      <span className="font-mono text-[12px] text-black">{tempPassword.email}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(tempPassword.email, "email")}
+                        className="shrink-0 text-[11px] font-semibold text-zinc-600 hover:text-black"
+                      >
+                        {copied === "email" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 rounded border border-zinc-300 bg-white px-2 py-1.5">
+                      <span className="select-all font-mono text-[12px] font-semibold text-black">{tempPassword.password}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(tempPassword.password, "password")}
+                        className="shrink-0 text-[11px] font-semibold text-zinc-600 hover:text-black"
+                      >
+                        {copied === "password" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-zinc-500">
+                      Copy it rather than retyping — the password is case-sensitive.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        copyToClipboard(
+                          `Email: ${tempPassword.email}\nPassword: ${tempPassword.password}`,
+                          "credentials",
+                        )
+                      }
+                      className="w-full border-zinc-300 bg-white text-xs text-black hover:bg-zinc-100"
+                    >
+                      {copied === "credentials" ? "Credentials copied" : "Copy credentials"}
+                    </Button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTempPassword(null)}
+                    className="mt-2 text-[11px] text-zinc-500 hover:text-black"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
               <Button className="w-full bg-black text-white hover:bg-zinc-800" disabled={saveUserMutation.isPending} type="submit">{saveUserMutation.isPending ? "Saving..." : selectedUser ? "Save Access" : "Create User"}</Button>
             </form>
           </CardContent>

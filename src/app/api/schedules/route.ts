@@ -3,13 +3,21 @@ import { db } from "@/db";
 import { workingScheduleLines, workingSchedules } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
 import { headerFromLines, resolveLines, scheduleSchema } from "../_lib/schedules";
+import { isResponse, resolveAccess } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 export async function GET() {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const rows = await db
       .select()
       .from(workingSchedules)
+      .where(eq(workingSchedules.organizationId, access.organizationId))
       .orderBy(asc(workingSchedules.name));
 
     const lines = rows.length
@@ -39,6 +47,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const parsed = scheduleSchema.safeParse(await request.json());
 
     if (!parsed.success) {
@@ -54,6 +68,7 @@ export async function POST(request: Request) {
     const [schedule] = await db
       .insert(workingSchedules)
       .values({
+        organizationId: access.organizationId,
         name: parsed.data.name,
         timezone: parsed.data.timezone,
         status: parsed.data.status,

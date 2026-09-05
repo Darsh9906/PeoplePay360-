@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { employees, sessions, users } from "@/db/schema";
+import { employees, organizations, sessions, users } from "@/db/schema";
+import { NO_MATCH, isResponse, requireRole } from "../../_lib/access";
 import { hashPassword } from "../../_lib/auth";
 import { writeAuditLog } from "../../_lib/audit";
 import { badRequest, noContent, notFound, ok, serverError } from "../../_lib/responses";
@@ -19,11 +20,46 @@ const updateUserSchema = z.object({
   password: z.string().min(8).optional(),
 });
 
+async function organizationDomain(organizationId: string | null) {
+  if (!organizationId) return null;
+
+  const [organization] = await db
+    .select({ emailDomain: organizations.emailDomain })
+    .from(organizations)
+    .where(eq(organizations.id, organizationId))
+    .limit(1);
+
+  return organization?.emailDomain?.toLowerCase() ?? null;
+}
+
+async function validateWorkspaceEmail(email: string, organizationId: string | null) {
+  const domain = await organizationDomain(organizationId);
+
+  if (!domain) {
+    return "This admin is not linked to an organization workspace";
+  }
+
+  if (!email.endsWith(`@${domain}`)) {
+    return `Use an email from your organization domain: ${domain}`;
+  }
+
+  return null;
+}
+
 export async function GET(_request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
     const user = await db.query.users.findFirst({
-      where: eq(users.id, id),
+      where: and(
+        eq(users.id, id),
+        eq(users.organizationId, actor.organizationId ?? NO_MATCH),
+      ),
       with: {
         employee: true,
         sessions: true,
@@ -52,6 +88,12 @@ export async function GET(_request: Request, ctx: Params) {
 
 export async function PATCH(request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
     const parsed = updateUserSchema.safeParse(await request.json());
 
@@ -70,7 +112,16 @@ export async function PATCH(request: Request, ctx: Params) {
     } = {};
 
     if (data.name) updateData.name = data.name;
-    if (data.email) updateData.email = data.email.toLowerCase();
+    if (data.email) {
+      const email = data.email.toLowerCase().trim();
+      const emailError = await validateWorkspaceEmail(email, actor.organizationId);
+
+      if (emailError) {
+        return badRequest(emailError);
+      }
+
+      updateData.email = email;
+    }
     if (data.role) updateData.role = data.role;
     if (data.status) updateData.status = data.status;
     if (data.password) {
@@ -81,7 +132,12 @@ export async function PATCH(request: Request, ctx: Params) {
     const [user] = await db
       .update(users)
       .set(updateData)
-      .where(eq(users.id, id))
+      .where(
+        and(
+          eq(users.id, id),
+          eq(users.organizationId, actor.organizationId ?? NO_MATCH),
+        ),
+      )
       .returning({
         id: users.id,
         name: users.name,
@@ -100,11 +156,17 @@ export async function PATCH(request: Request, ctx: Params) {
         await db
           .update(employees)
           .set({ userId: id })
-          .where(eq(employees.id, data.employeeId));
+          .where(
+            and(
+              eq(employees.id, data.employeeId),
+              eq(employees.organizationId, actor.organizationId ?? NO_MATCH),
+            ),
+          );
       }
     }
 
     await writeAuditLog({
+      actorUserId: actor.id,
       action: "update",
       entityType: "user",
       entityId: id,
@@ -119,11 +181,33 @@ export async function PATCH(request: Request, ctx: Params) {
 
 export async function DELETE(_request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.id, id),
+          eq(users.organizationId, actor.organizationId ?? NO_MATCH),
+        ),
+      )
+      .limit(1);
+
+    if (!user) {
+      return notFound("User not found");
+    }
+
     await db.update(employees).set({ userId: null }).where(eq(employees.userId, id));
     await db.delete(sessions).where(eq(sessions.userId, id));
     await db.delete(users).where(eq(users.id, id));
     await writeAuditLog({
+      actorUserId: actor.id,
       action: "delete",
       entityType: "user",
       entityId: id,

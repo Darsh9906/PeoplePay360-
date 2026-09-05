@@ -1,10 +1,16 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { departments, employees } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
 import { isResponse, resolveAccess } from "../_lib/access";
-import { badRequest, created, ok, serverError } from "../_lib/responses";
+import {
+  badRequest,
+  created,
+  forbidden,
+  ok,
+  serverError,
+} from "../_lib/responses";
 
 const createEmployeeSchema = z.object({
   employeeCode: z.string().min(1),
@@ -41,9 +47,12 @@ export async function GET() {
       .from(employees)
       .innerJoin(departments, eq(employees.departmentId, departments.id))
       .where(
-        access.scopeEmployeeId
-          ? eq(employees.id, access.scopeEmployeeId)
-          : undefined,
+        and(
+          eq(employees.organizationId, access.organizationId),
+          access.scopeEmployeeId
+            ? eq(employees.id, access.scopeEmployeeId)
+            : undefined,
+        ),
       )
       .orderBy(asc(employees.employeeCode));
 
@@ -60,6 +69,17 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
+    // Creating employees is an HR action, not self-service.
+    if (access.user.role === "employee") {
+      return forbidden("Your role does not allow this action");
+    }
+
     const parsed = createEmployeeSchema.safeParse(await request.json());
 
     if (!parsed.success) {
@@ -69,6 +89,7 @@ export async function POST(request: Request) {
     const [employee] = await db
       .insert(employees)
       .values({
+        organizationId: access.organizationId,
         ...parsed.data,
         workEmail: parsed.data.workEmail.toLowerCase(),
       })

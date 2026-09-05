@@ -5,7 +5,7 @@ import {
   payruns,
   salaryStructures,
 } from "@/db/schema";
-import { isResponse, requireRole } from "../_lib/access";
+import { NO_MATCH, isResponse, requireRole } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 type CreatePayrunBody = {
@@ -25,6 +25,7 @@ export async function GET() {
     }
 
     const rows = await db.query.payruns.findMany({
+      where: eq(payruns.organizationId, actor.organizationId ?? NO_MATCH),
       with: {
         salaryStructure: true,
         employees: true,
@@ -72,6 +73,7 @@ export async function POST(request: Request) {
     const [payrun] = await db
       .insert(payruns)
       .values({
+        organizationId: actor.organizationId ?? NO_MATCH,
         name: body.name ?? `Payroll ${body.periodStart} to ${body.periodEnd}`,
         periodStart: body.periodStart,
         periodEnd: body.periodEnd,

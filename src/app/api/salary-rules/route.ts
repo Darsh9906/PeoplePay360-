@@ -25,6 +25,16 @@ const salaryRuleSchema = z.object({
 
 export async function GET(request: Request) {
   try {
+    const reader = await requireRole([
+      "payroll_user",
+      "payroll_manager",
+      "admin",
+    ]);
+
+    if (isResponse(reader)) {
+      return reader;
+    }
+
     const { searchParams } = new URL(request.url);
     const structureId = searchParams.get("structureId");
 

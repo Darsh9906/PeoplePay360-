@@ -46,6 +46,7 @@ const tables = [
   "sessions",
   "statutory_settings",
   "users",
+  "organizations",
 ];
 
 async function reset() {

@@ -32,9 +32,9 @@ curl -X POST http://localhost:3000/api/auth/bootstrap \
 | Variable | Required | Purpose |
 |---|---|---|
 | `DATABASE_URL` | yes | Neon/Postgres connection string |
-| `RESEND_API_KEY` | no | Enables real email delivery; without it sends are logged and reported as skipped |
-| `RESEND_FROM_EMAIL` | no | From address for outgoing mail |
-| `APP_URL` | no | Base URL used in invite / reset links |
+| `RESEND_API_KEY` | no | Only used to email payslips from a pay run. Without it, payslip sending reports as skipped and nothing else is affected |
+| `RESEND_FROM_EMAIL` | no | From address for payslip email |
+| `APP_URL` | no | Base URL used in outgoing links |
 
 ## End-to-end flow test
 
@@ -60,6 +60,10 @@ npm run dev                  # in one terminal
 npm run test:e2e             # in another — leaves the data in place
 npm run test:e2e -- --clean  # or tear it back down afterwards
 ```
+
+> The flow test **erases the database** before it runs. If any workspace already
+> exists it refuses and tells you, so a demo account is never lost by accident.
+> Add `--force` when you really do want it wiped.
 
 Without `--clean` the accounts it creates stay usable for demoing
 (password `Password123!`): `admin@`, `hr@`, `payroll.user@` and

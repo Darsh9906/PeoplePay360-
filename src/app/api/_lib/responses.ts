@@ -2,8 +2,8 @@ export function ok<T>(data: T, init?: ResponseInit) {
   return Response.json({ data }, init);
 }
 
-export function created<T>(data: T) {
-  return ok(data, { status: 201 });
+export function created<T>(data: T, init?: ResponseInit) {
+  return ok(data, { ...init, status: 201 });
 }
 
 export function badRequest(message: string) {

@@ -13,8 +13,16 @@ import {
   timeOffTypes,
   workingSchedules,
 } from "@/db/schema";
+import { isResponse, resolveAccess } from "../../_lib/access";
 import { writeAuditLog } from "../../_lib/audit";
-import { badRequest, noContent, notFound, ok, serverError } from "../../_lib/responses";
+import {
+  badRequest,
+  forbidden,
+  noContent,
+  notFound,
+  ok,
+  serverError,
+} from "../../_lib/responses";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -33,6 +41,17 @@ const updateEmployeeSchema = z.object({
 export async function GET(_request: Request, ctx: Params) {
   try {
     const { id } = await ctx.params;
+
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
+    // An employee may only open their own record.
+    if (access.scopeEmployeeId && access.scopeEmployeeId !== id) {
+      return forbidden("You can only view your own employee record");
+    }
 
     const employee = await db
       .select({
