@@ -134,14 +134,14 @@ export default function EmployeeList() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-200 pb-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-300 pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-black">
+          <h1 className="text-2xl font-semibold tracking-tight text-black">
             Employees
           </h1>
-          <p className="text-sm text-zinc-500 mt-0.5">
+          <p className="text-sm text-zinc-600 mt-1">
             Manage employee directory and department allocations.
           </p>
         </div>
@@ -150,7 +150,7 @@ export default function EmployeeList() {
             resetForm()
             setIsModalOpen(true)
           }}
-          className="bg-black hover:bg-zinc-800 text-white shadow-sm font-medium gap-1.5 self-start sm:self-auto border border-black"
+          className="gap-1.5 self-start sm:self-auto"
         >
           <Plus className="h-4 w-4" />
           Add Employee
@@ -158,7 +158,7 @@ export default function EmployeeList() {
       </div>
 
       {/* Search & Filters Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white p-4 rounded-xl border border-zinc-300 shadow-sm">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white p-4 rounded-md border border-zinc-300 shadow-sm">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
           <Input
@@ -216,7 +216,7 @@ export default function EmployeeList() {
       </div>
 
       {/* Employee Table */}
-      <div className="rounded-xl border border-zinc-300 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-md border border-zinc-300 bg-white shadow-sm overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="border-zinc-200 bg-zinc-50">
@@ -242,7 +242,7 @@ export default function EmployeeList() {
                   <TableRow key={emp.id} className="border-zinc-200 hover:bg-zinc-50">
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-black font-bold text-xs border border-zinc-300">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-100 text-black font-bold text-xs border border-zinc-300">
                           {emp.firstName[0]}
                           {emp.lastName[0]}
                         </div>
@@ -297,11 +297,11 @@ export default function EmployeeList() {
                 <TableCell colSpan={6} className="h-56 text-center">
                   <div className="flex flex-col items-center justify-center text-zinc-500 space-y-2 py-6">
                     <XCircle className="h-10 w-10 text-zinc-300" />
-                    <p className="text-base font-bold text-black">
+                    <p className="text-base font-semibold text-black">
                       No employees found
                     </p>
                     <p className="text-xs text-zinc-500 max-w-sm">
-                      There are no employee records to display. Use the "Add Employee" button above to add an employee.
+                      There are no employee records to display. Use the &quot;Add Employee&quot; button above to add an employee.
                     </p>
                   </div>
                 </TableCell>
@@ -314,7 +314,7 @@ export default function EmployeeList() {
       {/* Add Employee Modal / Dialog */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogHeader>
-          <DialogTitle className="text-black font-bold">Add New Employee</DialogTitle>
+          <DialogTitle className="text-black font-semibold">Add New Employee</DialogTitle>
           <DialogDescription className="text-zinc-500">
             Enter employee details below to add a record to your active session.
           </DialogDescription>

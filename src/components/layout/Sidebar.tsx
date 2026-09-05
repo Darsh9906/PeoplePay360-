@@ -42,10 +42,7 @@ export default function Sidebar() {
     >
       {/* Brand Header */}
       <div className="flex h-16 items-center justify-between px-4 border-b border-zinc-800">
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-black font-bold text-sm shadow-sm border border-zinc-300">
-            P360
-          </div>
+        <div className="flex items-center overflow-hidden">
           {sidebarOpen && (
             <div className="flex flex-col truncate">
               <span className="font-semibold text-sm tracking-wide text-white">
@@ -57,7 +54,7 @@ export default function Sidebar() {
         </div>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="hidden sm:flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 transition border border-zinc-800"
+          className="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-zinc-950 text-zinc-400 hover:text-white hover:bg-zinc-900 transition border border-zinc-800"
           title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
         >
           {sidebarOpen ? (
@@ -81,7 +78,7 @@ export default function Sidebar() {
             return (
               <div
                 key={item.label}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-zinc-600 cursor-not-allowed select-none ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-xs font-medium text-zinc-600 cursor-not-allowed select-none ${
                   !sidebarOpen && "justify-center px-0"
                 }`}
                 title={`${item.label} (Out of scope)`}
@@ -90,7 +87,7 @@ export default function Sidebar() {
                 {sidebarOpen && (
                   <div className="flex-1 flex items-center justify-between">
                     <span>{item.label}</span>
-                    <span className="text-[10px] bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded text-zinc-500">
+                    <span className="text-[10px] bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 rounded-sm text-zinc-500">
                       Soon
                     </span>
                   </div>
@@ -103,7 +100,7 @@ export default function Sidebar() {
             <Link
               key={item.label}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-xs font-medium transition-all ${
                 isActive
                   ? "bg-white text-black font-semibold shadow-sm"
                   : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
@@ -118,7 +115,7 @@ export default function Sidebar() {
                       className={`text-[10px] px-1.5 py-0.5 rounded font-normal ${
                         isActive
                           ? "bg-black text-white border border-zinc-700"
-                          : "bg-zinc-900 text-zinc-300 border border-zinc-800"
+                          : "bg-zinc-950 text-zinc-300 border border-zinc-800"
                       }`}
                     >
                       {item.badge}
@@ -133,7 +130,7 @@ export default function Sidebar() {
 
       {/* Footer Info */}
       {sidebarOpen && (
-        <div className="p-3 m-3 rounded-lg bg-zinc-900 border border-zinc-800 text-xs">
+        <div className="p-3 m-3 rounded-md bg-zinc-950 border border-zinc-800 text-xs">
           <div className="flex items-center gap-2 text-zinc-200 font-medium mb-1">
             <Shield className="h-3.5 w-3.5" />
             <span>Frontend Task Mode</span>

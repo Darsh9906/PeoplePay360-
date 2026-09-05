@@ -47,19 +47,19 @@ export default function Contracts() {
   }, [contracts, searchQuery, selectedStatus, selectedContractType])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Page Header */}
-      <div className="flex flex-col gap-2 border-b border-zinc-200 pb-5">
-        <h1 className="text-2xl font-bold tracking-tight text-black">
+      <div className="flex flex-col gap-2 border-b border-zinc-300 pb-5">
+        <h1 className="text-2xl font-semibold tracking-tight text-black">
           Contracts
         </h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-zinc-600">
           Manage employment agreements, salary terms, schedules, and active validity periods.
         </p>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white p-4 rounded-xl border border-zinc-300 shadow-sm">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white p-4 rounded-md border border-zinc-300 shadow-sm">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
           <Input
@@ -116,7 +116,7 @@ export default function Contracts() {
       </div>
 
       {/* Contract Table */}
-      <div className="rounded-xl border border-zinc-300 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-md border border-zinc-300 bg-white shadow-sm overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="border-zinc-200 bg-zinc-50">
@@ -145,7 +145,7 @@ export default function Contracts() {
                   <TableRow key={contract.id} className="border-zinc-200 hover:bg-zinc-50">
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-black font-bold text-xs border border-zinc-300">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-100 text-black font-bold text-xs border border-zinc-300">
                           <FileText className="h-4 w-4" />
                         </div>
                         <div>
@@ -198,7 +198,7 @@ export default function Contracts() {
                 <TableCell colSpan={7} className="h-56 text-center">
                   <div className="flex flex-col items-center justify-center text-zinc-500 space-y-2 py-6">
                     <XCircle className="h-10 w-10 text-zinc-300" />
-                    <p className="text-base font-bold text-black">
+                    <p className="text-base font-semibold text-black">
                       No contracts found
                     </p>
                     <p className="text-xs text-zinc-500 max-w-sm">

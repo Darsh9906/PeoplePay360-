@@ -11,11 +11,11 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   const sidebarOpen = app?.sidebarOpen ?? true
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-foreground flex flex-col">
+    <div className="min-h-screen bg-white text-foreground flex flex-col">
       <Sidebar />
       <Navbar />
       <main
-        className={`flex-1 p-4 sm:p-6 transition-all duration-300 ${
+        className={`flex-1 p-4 sm:p-6 transition-all duration-300 bg-zinc-50 ${
           sidebarOpen ? "lg:ml-64" : "lg:ml-20"
         }`}
       >

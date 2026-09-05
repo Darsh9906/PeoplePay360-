@@ -17,12 +17,12 @@ export default function Navbar() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:text-black hover:bg-zinc-100 transition sm:hidden"
+          className="flex h-9 w-9 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-700 hover:text-black hover:bg-zinc-100 transition sm:hidden"
         >
           <Menu className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-black bg-zinc-100 border border-zinc-300 px-2 py-0.5 rounded">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-black bg-white border border-zinc-300 px-2 py-1 rounded-sm">
             HR Operations
           </span>
         </div>
@@ -39,13 +39,13 @@ export default function Navbar() {
           />
         </div>
 
-        <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:text-black transition relative">
+        <button className="flex h-9 w-9 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-700 hover:text-black hover:bg-zinc-50 transition relative">
           <Bell className="h-4 w-4" />
           <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-black" />
         </button>
 
         <div className="flex items-center gap-2 border-l border-zinc-200 pl-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-white font-bold text-xs border border-black">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-black text-white font-bold text-xs border border-black">
             DD
           </div>
           <div className="hidden sm:flex flex-col text-left">
