@@ -35,6 +35,11 @@ curl -X POST http://localhost:3000/api/auth/bootstrap \
 | `RESEND_API_KEY` | no | Only used to email payslips from a pay run. Without it, payslip sending reports as skipped and nothing else is affected |
 | `RESEND_FROM_EMAIL` | no | From address for payslip email |
 | `APP_URL` | no | Base URL used in outgoing links |
+| `RESEND_API_KEY` | no | Enables real email delivery; without it sends are logged and reported as skipped |
+| `RESEND_FROM_EMAIL` | no | From address for outgoing mail |
+| `APP_URL` | no | Base URL used in invite / reset links |
+| `OFFICE_PUBLIC_IP` | no | Comma-separated approved office public IP(s) for Attendance's office-network check-in verification. Unset = verification shows "not configured" and self check-in stays blocked |
+| `OFFICE_NETWORK_NAME` | no | Friendly label shown when office-network verification succeeds (defaults to "Office Network") |
 
 ## End-to-end flow test
 

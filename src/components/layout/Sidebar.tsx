@@ -23,6 +23,13 @@ import {
   Users,
   Wallet,
   type LucideIcon,
+  Calendar,
+  Clock,
+  DollarSign,
+  Briefcase,
+  ChevronLeft,
+  ChevronRight,
+  Shield,
 } from "lucide-react"
 import { useApp } from "@/src/context/AppContext"
 import { useAuth } from "@/src/context/AuthContext"
@@ -73,6 +80,16 @@ export default function Sidebar() {
 
   // The role decides the entire menu — nothing is rendered then hidden.
   const items = navigationForRole(user?.role)
+  const navItems = [
+    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Employees", href: "/employees", icon: Users, badge: "HR Ops" },
+    { label: "Contracts", href: "/contracts", icon: FileText, badge: "HR Ops" },
+    { label: "Attendance", href: "/attendance", icon: Clock },
+    { label: "Time Off", href: "/timeoff", icon: Calendar },
+    { label: "Payroll", href: "/payroll", icon: DollarSign },
+    { label: "Schedules", href: "/schedules", icon: Briefcase },
+    { label: "User Management", href: "/users", icon: Users },
+  ]
 
   return (
     <aside

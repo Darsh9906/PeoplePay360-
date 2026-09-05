@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CalendarDays, Check, Eye, Plus, Search, X } from "lucide-react"
@@ -90,6 +91,8 @@ function daysBetween(startDate: string, endDate: string) {
 }
 
 export default function Requests() {
+  const searchParams = useSearchParams()
+  const employeeIdFilter = searchParams.get("employeeId")
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const canReview = user?.role !== "employee"
@@ -104,7 +107,7 @@ export default function Requests() {
 
   const requestsQuery = useQuery({
     queryKey: ["time-off"],
-    queryFn: () => apiRequest<TimeOffRequest[]>("/api/time-off"),
+    queryFn: () => apiRequest<TimeOffRequest[]>(employeeIdFilter ? `/api/time-off?employeeId=${encodeURIComponent(employeeIdFilter)}` : "/api/time-off"),
   })
   const typesQuery = useQuery({
     queryKey: ["time-off-types"],

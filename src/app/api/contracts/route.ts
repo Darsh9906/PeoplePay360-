@@ -30,13 +30,16 @@ function getDisplayStatus(status: "active" | "expired" | "terminated") {
   return "Expired";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const access = await resolveAccess();
 
     if (isResponse(access)) {
       return access;
     }
+
+    const { searchParams } = new URL(request.url);
+    const employeeId = searchParams.get("employeeId");
 
     const rows = await db
       .select({
@@ -78,6 +81,11 @@ export async function GET() {
             ? eq(contracts.employeeId, access.scopeEmployeeId)
             : undefined,
         ),
+        access.scopeEmployeeId
+          ? eq(contracts.employeeId, access.scopeEmployeeId)
+          : employeeId
+            ? eq(contracts.employeeId, employeeId)
+            : undefined,
       )
       .orderBy(desc(contracts.startDate));
 

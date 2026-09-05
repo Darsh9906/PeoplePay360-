@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Plus, Search, Trash2, Wallet, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -66,6 +67,8 @@ function statusVariant(status: Allocation["status"]) {
 }
 
 export default function Allocations() {
+  const searchParams = useSearchParams()
+  const employeeIdFilter = searchParams.get("employeeId")
   const queryClient = useQueryClient()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -76,7 +79,7 @@ export default function Allocations() {
 
   const allocationsQuery = useQuery({
     queryKey: ["leave-allocations"],
-    queryFn: () => apiRequest<Allocation[]>("/api/leave-allocations"),
+    queryFn: () => apiRequest<Allocation[]>(employeeIdFilter ? `/api/leave-allocations?employeeId=${encodeURIComponent(employeeIdFilter)}` : "/api/leave-allocations"),
   })
   const typesQuery = useQuery({
     queryKey: ["time-off-types"],
