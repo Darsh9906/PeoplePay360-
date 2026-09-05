@@ -1,13 +1,28 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { employees, payrollWarnings } from "@/db/schema";
+import { employees, payrollWarnings, payruns } from "@/db/schema";
+import { isResponse, resolveAccess } from "../_lib/access";
 import { ok, serverError } from "../_lib/responses";
 
 export async function GET(request: Request) {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const { searchParams } = new URL(request.url);
     const payrunId = searchParams.get("payrunId");
     const employeeId = searchParams.get("employeeId");
+    const filters = [
+      eq(payruns.organizationId, access.organizationId),
+      access.scopeEmployeeId
+        ? eq(payrollWarnings.employeeId, access.scopeEmployeeId)
+        : undefined,
+      payrunId ? eq(payrollWarnings.payrunId, payrunId) : undefined,
+      employeeId ? eq(payrollWarnings.employeeId, employeeId) : undefined,
+    ].filter(Boolean);
 
     const rows = await db
       .select({
@@ -20,14 +35,9 @@ export async function GET(request: Request) {
         message: payrollWarnings.message,
       })
       .from(payrollWarnings)
+      .innerJoin(payruns, eq(payrollWarnings.payrunId, payruns.id))
       .leftJoin(employees, eq(payrollWarnings.employeeId, employees.id))
-      .where(
-        payrunId
-          ? eq(payrollWarnings.payrunId, payrunId)
-          : employeeId
-            ? eq(payrollWarnings.employeeId, employeeId)
-            : undefined,
-      )
+      .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(payrollWarnings.id));
 
     return ok(rows);

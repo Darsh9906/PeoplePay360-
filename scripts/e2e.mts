@@ -17,12 +17,14 @@
  * Usage:
  *   npm run test:e2e            reset, run, and leave the data in place
  *   npm run test:e2e -- --clean reset, run, then empty the database again
+ *   npm run test:e2e -- --force allow it to erase existing workspaces
  */
 import { neon } from "@neondatabase/serverless";
 
 const baseUrl = process.env.BASE_URL ?? "http://localhost:3000";
 const databaseUrl = process.env.DATABASE_URL;
 const shouldClean = process.argv.includes("--clean");
+const force = process.argv.includes("--force");
 
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is not set");
@@ -132,14 +134,18 @@ class Session {
     return result.payload?.data as T;
   }
 
-  async login(email: string) {
-    const result = await this.post("/api/auth/login", { email, password: PASSWORD });
+  async login(email: string, password = PASSWORD) {
+    const result = await this.post("/api/auth/login", { email, password });
 
     if (!result.status) {
       throw new Error(`Login failed for ${email}: ${result.payload?.error}`);
     }
 
-    return result.payload?.data as { id: string; role: string };
+    return result.payload?.data as {
+      id: string;
+      role: string;
+      mustChangePassword: boolean;
+    };
   }
 }
 
@@ -178,7 +184,7 @@ async function resetDatabase() {
     "salary_structures", "employee_working_schedules", "working_schedule_lines",
     "working_schedules", "employee_bank_accounts", "employees", "departments",
     "approvals", "audit_logs", "documents", "notifications", "email_logs",
-    "invite_tokens", "password_reset_tokens", "sessions", "statutory_settings", "users",
+    "invite_tokens", "password_reset_tokens", "sessions", "statutory_settings", "users", "organizations",
   ];
 
   await sql.query(
@@ -202,23 +208,71 @@ async function run() {
   }
 
   step("1. Reset and bootstrap");
+
+  // This wipes everything. Refuse to do that silently to a workspace someone
+  // is already using — losing a demo account mid-session is not worth it.
+  const existing = (await sql`
+    select name from organizations order by created_at
+  `) as { name: string }[];
+
+  if (existing.length > 0 && !force) {
+    console.error(
+      `\n\x1b[31mThis would erase ${existing.length} existing workspace(s):\x1b[0m ` +
+        existing.map((row) => row.name).join(", "),
+    );
+    console.error(
+      "\nThe flow test needs an empty database. Re-run with --force if you are sure:\n" +
+        "  npm run test:e2e -- --force\n",
+    );
+    process.exit(1);
+  }
+
   await resetDatabase();
   check("database emptied", true);
 
   const admin = new Session("admin");
-  const bootstrap = await admin.post<{ id: string; role: string }>("/api/auth/bootstrap", {
-    name: "Platform Admin",
-    email: "admin@peoplepay360.test",
-    password: PASSWORD,
-  });
-  check("bootstrap creates the first admin", bootstrap.status, `role=${bootstrap.payload?.data?.role}`);
 
-  const secondBootstrap = await admin.post("/api/auth/bootstrap", {
-    name: "Intruder",
-    email: "intruder@peoplepay360.test",
+  const personalEmail = await admin.post("/api/auth/signup", {
+    companyName: "Acme Manufacturing",
+    fullName: "Riya Shah",
+    workEmail: "riya@gmail.com",
     password: PASSWORD,
   });
-  check("bootstrap is refused once a user exists", secondBootstrap.code === 403);
+  check("signup rejects a personal email domain", personalEmail.code === 400, personalEmail.payload?.error ?? "");
+
+  const signup = await admin.post<{
+    organization: { name: string; slug: string };
+    user: { role: string; mustChangePassword: boolean };
+  }>("/api/auth/signup", {
+    companyName: "Acme Manufacturing",
+    fullName: "Riya Shah",
+    workEmail: "admin@peoplepay360.test",
+    password: PASSWORD,
+    companySize: "11-50",
+    industry: "Manufacturing",
+  });
+  check(
+    "company signup creates the workspace and its admin",
+    signup.status && signup.payload?.data?.user.role === "admin",
+    `org=${signup.payload?.data?.organization.name}`,
+  );
+  check(
+    "signup signs the admin straight in",
+    Boolean(admin.cookie),
+  );
+
+  // Signup stays open to other companies; only the same domain is refused.
+  const sameDomainAgain = await new Session("dupe-domain").post("/api/auth/signup", {
+    companyName: "Acme Duplicate",
+    fullName: "Someone Else",
+    workEmail: "someone@peoplepay360.test",
+    password: PASSWORD,
+  });
+  check(
+    "a company domain cannot claim two workspaces",
+    sameDomainAgain.code === 409,
+    sameDomainAgain.payload?.error ?? "",
+  );
 
   const anon = new Session("anonymous");
   const anonRead = await anon.get("/api/employees");
@@ -226,6 +280,7 @@ async function run() {
 
   const loggedIn = await admin.login("admin@peoplepay360.test");
   check("admin can sign in", loggedIn.role === "admin");
+  check("admin has no forced password change", !loggedIn.mustChangePassword);
 
   const badLogin = await anon.post("/api/auth/login", {
     email: "admin@peoplepay360.test",
@@ -671,7 +726,79 @@ async function run() {
     `got ${filtered.payroll.payslipCount}, expected 1 (Operations)`,
   );
 
-  step("10. Role-based access control");
+  step("10. Admin creates a user with a temporary password");
+
+  const invited = await admin.create<{
+    id: string;
+    email: string;
+    role: string;
+    mustChangePassword: boolean;
+    tempPassword?: string;
+  }>("/api/users", {
+    name: "Priya Sharma",
+    email: "priya.sharma@peoplepay360.test",
+    role: "hr_manager",
+  });
+  check("invited account requires a password change", invited.mustChangePassword);
+  check(
+    "the temporary password is returned to the admin",
+    Boolean(invited.tempPassword),
+  );
+
+  const tempPassword = invited.tempPassword;
+
+  if (!tempPassword) {
+    check("temporary password available to continue the flow", false);
+  } else {
+    const invitee = new Session("invitee");
+    const firstLogin = await invitee.login(invited.email, tempPassword);
+    check("temporary password signs in", firstLogin.mustChangePassword === true);
+
+    const blocked = await invitee.get("/api/employees");
+    check(
+      "a temporary password unlocks nothing else",
+      blocked.code === 403,
+      `HTTP ${blocked.code}`,
+    );
+
+    const changed = await invitee.post("/api/auth/password/change", {
+      currentPassword: tempPassword,
+      newPassword: "ChosenByMe123!",
+    });
+    check("the user sets their own password", changed.status);
+
+    const afterChange = await invitee.get<{ mustChangePassword: boolean }>("/api/auth/me");
+    check(
+      "the forced-change flag clears and the session survives",
+      afterChange.code === 200 && afterChange.payload?.data?.mustChangePassword === false,
+    );
+
+    const nowAllowed = await invitee.get("/api/employees");
+    check("HR data opens once the password is their own", nowAllowed.code === 200);
+
+    const reusedTemp = new Session("reused");
+    const reuse = await reusedTemp.post("/api/auth/login", {
+      email: invited.email,
+      password: tempPassword,
+    });
+    check("the temporary password stops working", reuse.code === 401);
+
+    // An admin can reissue one when somebody forgets their password.
+    const reset = await admin.create<{ tempPassword: string }>(
+      `/api/users/${invited.id}/reset-password`,
+      {},
+    );
+    check("an admin can reset a password", Boolean(reset.tempPassword));
+
+    const afterReset = new Session("after-reset");
+    const resetLogin = await afterReset.login(invited.email, reset.tempPassword);
+    check(
+      "the reset password signs in and forces a change",
+      resetLogin.mustChangePassword === true,
+    );
+  }
+
+  step("11. Role-based access control");
   const employeeUser = await admin.create<{ id: string }>("/api/users", {
     name: target.name,
     email: `${target.name.toLowerCase().replace(" ", ".")}@peoplepay360.test`,
@@ -715,6 +842,12 @@ async function run() {
   const employeeDashboard = await employeeSession.get("/api/dashboard");
   check("employee cannot read the dashboard", employeeDashboard.code === 403);
 
+  const employeeUsers = await employeeSession.get("/api/users");
+  check("employee cannot read user administration", employeeUsers.code === 403);
+
+  const employeeRules = await employeeSession.get("/api/salary-rules");
+  check("employee cannot read salary configuration", employeeRules.code === 403);
+
   const othersPayslip = await employeeSession.get(`/api/payslips/${riya!.id}`);
   check("employee cannot open another person's payslip", othersPayslip.code === 403);
 
@@ -724,6 +857,8 @@ async function run() {
   check("HR manager sees all employees", hrEmployees.length === 4);
   const hrPayruns = await hrSession.get("/api/payruns");
   check("HR manager cannot read pay runs", hrPayruns.code === 403);
+  const hrRules = await hrSession.get("/api/salary-rules");
+  check("HR manager cannot read salary configuration", hrRules.code === 403);
 
   const payrollSession = new Session("payroll_user");
   await payrollSession.login("payroll.user@peoplepay360.test");
@@ -740,6 +875,77 @@ async function run() {
   check("payroll user cannot write salary rules", ruleWrite.code === 403);
   const payrollPayruns = await payrollSession.data<unknown[]>("/api/payruns");
   check("payroll user can read pay runs", payrollPayruns.length === 1);
+
+  step("12. Tenant isolation");
+
+  const other = new Session("other-tenant");
+  const otherSignup = await other.post<{ organization: { name: string } }>(
+    "/api/auth/signup",
+    {
+      companyName: "Globex Corp",
+      fullName: "Sam Cole",
+      workEmail: "sam@globex.test",
+      password: PASSWORD,
+    },
+  );
+  check(
+    "a second company can create its own workspace",
+    otherSignup.status,
+    otherSignup.payload?.data?.organization.name ?? otherSignup.payload?.error ?? "",
+  );
+
+  const duplicateDomain = await new Session("dupe").post("/api/auth/signup", {
+    companyName: "Globex Again",
+    fullName: "Someone Else",
+    workEmail: "another@globex.test",
+    password: PASSWORD,
+  });
+  check("a domain cannot claim two workspaces", duplicateDomain.code === 409);
+
+  const otherEmployees = await other.data<unknown[]>("/api/employees");
+  check(
+    "a new workspace starts empty",
+    otherEmployees.length === 0,
+    `saw ${otherEmployees.length} employees`,
+  );
+
+  const otherPayruns = await other.data<unknown[]>("/api/payruns");
+  check("it sees none of the other tenant's pay runs", otherPayruns.length === 0);
+
+  const otherUsers = await other.data<{ email: string }[]>("/api/users");
+  check(
+    "it sees only its own user accounts",
+    otherUsers.length === 1 && otherUsers[0].email === "sam@globex.test",
+    `saw ${otherUsers.length}`,
+  );
+
+  // The same employee code must be reusable across tenants.
+  const otherDepartment = await other.create<{ id: string }>("/api/departments", {
+    name: "Sales",
+    code: "SLS",
+  });
+  const reusedCode = await other.post("/api/employees", {
+    employeeCode: "EMP001",
+    firstName: "Globex",
+    lastName: "Person",
+    workEmail: "person@globex.test",
+    departmentId: otherDepartment.id,
+    jobTitle: "Account Executive",
+    hireDate: yearStart,
+  });
+  check(
+    "employee codes are unique per workspace, not globally",
+    reusedCode.status,
+    reusedCode.payload?.error ?? "EMP001 reused in the second workspace",
+  );
+
+  // And the original tenant is untouched by any of it.
+  const originalEmployees = await admin.data<unknown[]>("/api/employees");
+  check(
+    "the first workspace is unaffected",
+    originalEmployees.length === 4,
+    `saw ${originalEmployees.length}`,
+  );
 
   // ------------------------------------------------------------- summary --
 

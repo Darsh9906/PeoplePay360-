@@ -1,8 +1,9 @@
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { statutorySettings } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
+import { isResponse, NO_MATCH, requireRole } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const statutorySchema = z.object({
@@ -18,9 +19,16 @@ const statutorySchema = z.object({
 
 export async function GET() {
   try {
+    const access = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const rows = await db
       .select()
       .from(statutorySettings)
+      .where(eq(statutorySettings.organizationId, access.organizationId ?? NO_MATCH))
       .orderBy(asc(statutorySettings.component));
 
     return ok(rows);
@@ -31,6 +39,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const access = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const parsed = statutorySchema.safeParse(await request.json());
 
     if (!parsed.success) {
@@ -40,6 +54,7 @@ export async function POST(request: Request) {
     const [setting] = await db
       .insert(statutorySettings)
       .values({
+        organizationId: access.organizationId,
         ...parsed.data,
         rate: parsed.data.rate?.toFixed(2),
         fixedAmount: parsed.data.fixedAmount?.toFixed(2),
@@ -47,6 +62,7 @@ export async function POST(request: Request) {
       .returning();
 
     await writeAuditLog({
+      actorUserId: access.id,
       action: "create",
       entityType: "statutory_setting",
       entityId: setting.id,

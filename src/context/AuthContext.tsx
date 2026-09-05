@@ -5,12 +5,32 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiRequest } from "@/src/lib/api"
 import type { UserRole } from "@/src/lib/rbac"
 
-type AuthUser = {
+export type AuthOrganization = {
+  id: string
+  name: string
+  slug: string
+  currency: string
+}
+
+/** The employee record this login owns, when one is linked. */
+export type AuthEmployee = {
+  id: string
+  employeeCode: string
+  firstName: string
+  lastName: string
+  jobTitle: string
+}
+
+export type AuthUser = {
   id: string
   name: string
   email: string
   role: UserRole
   status: "invited" | "active" | "inactive" | "suspended"
+  /** True until an admin-issued temporary password has been replaced. */
+  mustChangePassword?: boolean
+  organization?: AuthOrganization | null
+  employee?: AuthEmployee | null
 }
 
 interface AuthContextType {

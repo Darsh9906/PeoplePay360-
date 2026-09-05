@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
@@ -75,6 +75,12 @@ export async function GET(request: Request) {
         eq(workingSchedules.id, employeeWorkingSchedules.scheduleId),
       )
       .where(
+        and(
+          eq(employees.organizationId, access.organizationId),
+          access.scopeEmployeeId
+            ? eq(contracts.employeeId, access.scopeEmployeeId)
+            : undefined,
+        ),
         access.scopeEmployeeId
           ? eq(contracts.employeeId, access.scopeEmployeeId)
           : employeeId

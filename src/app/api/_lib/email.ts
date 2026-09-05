@@ -24,18 +24,6 @@ type ResendResponse = {
 
 const resendApiUrl = "https://api.resend.com/emails";
 
-function appUrl() {
-  return process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
-
-export function inviteUrl(token: string) {
-  return `${appUrl()}/invite?token=${encodeURIComponent(token)}`;
-}
-
-export function resetPasswordUrl(token: string) {
-  return `${appUrl()}/reset-password?token=${encodeURIComponent(token)}`;
-}
-
 export async function sendEmail(input: SendEmailInput) {
   const [log] = await db
     .insert(emailLogs)
@@ -128,50 +116,6 @@ export async function sendEmail(input: SendEmailInput) {
       reason: message,
     };
   }
-}
-
-export async function sendInviteEmail(input: {
-  userId: string;
-  name: string;
-  email: string;
-  token: string;
-}) {
-  const url = inviteUrl(input.token);
-
-  return sendEmail({
-    userId: input.userId,
-    to: input.email,
-    subject: "Set your PeoplePay360 password",
-    html: `
-      <p>Hello ${input.name},</p>
-      <p>Your PeoplePay360 account has been created. Use the link below to set your password.</p>
-      <p><a href="${url}">Set password</a></p>
-      <p>This invite link expires in 48 hours.</p>
-    `,
-    text: `Hello ${input.name}, set your PeoplePay360 password here: ${url}`,
-  });
-}
-
-export async function sendPasswordResetEmail(input: {
-  userId: string;
-  name: string;
-  email: string;
-  token: string;
-}) {
-  const url = resetPasswordUrl(input.token);
-
-  return sendEmail({
-    userId: input.userId,
-    to: input.email,
-    subject: "Reset your PeoplePay360 password",
-    html: `
-      <p>Hello ${input.name},</p>
-      <p>Use the link below to reset your PeoplePay360 password.</p>
-      <p><a href="${url}">Reset password</a></p>
-      <p>This reset link expires in 30 minutes.</p>
-    `,
-    text: `Hello ${input.name}, reset your PeoplePay360 password here: ${url}`,
-  });
 }
 
 export async function sendPayslipEmail(input: {

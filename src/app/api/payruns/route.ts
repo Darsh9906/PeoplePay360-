@@ -1,11 +1,12 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  employees,
   payrunEmployees,
   payruns,
   salaryStructures,
 } from "@/db/schema";
-import { isResponse, requireRole } from "../_lib/access";
+import { NO_MATCH, isResponse, requireRole } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 type CreatePayrunBody = {
@@ -25,6 +26,7 @@ export async function GET() {
     }
 
     const rows = await db.query.payruns.findMany({
+      where: eq(payruns.organizationId, actor.organizationId ?? NO_MATCH),
       with: {
         salaryStructure: true,
         employees: true,
@@ -65,24 +67,58 @@ export async function POST(request: Request) {
       body.salaryStructureId ??
       (
         await db.query.salaryStructures.findFirst({
-          where: eq(salaryStructures.isActive, true),
+          where: and(
+            eq(salaryStructures.organizationId, actor.organizationId ?? NO_MATCH),
+            eq(salaryStructures.isActive, true),
+          ),
         })
       )?.id;
+
+    if (body.salaryStructureId) {
+      const selectedStructure = await db.query.salaryStructures.findFirst({
+        where: and(
+          eq(salaryStructures.id, body.salaryStructureId),
+          eq(salaryStructures.organizationId, actor.organizationId ?? NO_MATCH),
+        ),
+      });
+
+      if (!selectedStructure) {
+        return badRequest("Selected salary structure is not available");
+      }
+    }
+
+    const scopedEmployees = body.employeeIds?.length
+      ? await db
+          .select({ id: employees.id })
+          .from(employees)
+          .where(
+            and(
+              eq(employees.organizationId, actor.organizationId ?? NO_MATCH),
+              inArray(employees.id, body.employeeIds),
+            ),
+          )
+      : [];
+
+    if (body.employeeIds?.length && scopedEmployees.length !== body.employeeIds.length) {
+      return badRequest("One or more selected employees are not available");
+    }
 
     const [payrun] = await db
       .insert(payruns)
       .values({
+        organizationId: actor.organizationId ?? NO_MATCH,
         name: body.name ?? `Payroll ${body.periodStart} to ${body.periodEnd}`,
         periodStart: body.periodStart,
         periodEnd: body.periodEnd,
         salaryStructureId,
         status: "draft",
+        createdBy: actor.id,
       })
       .returning();
 
     if (body.employeeIds?.length) {
       await db.insert(payrunEmployees).values(
-        body.employeeIds.map((employeeId) => ({
+        scopedEmployees.map(({ id: employeeId }) => ({
           payrunId: payrun.id,
           employeeId,
         })),

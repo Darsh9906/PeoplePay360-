@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { departments, employees } from "@/db/schema";
+import { NO_MATCH, isResponse, requireRole } from "../../_lib/access";
 import { badRequest, ok, serverError } from "../../_lib/responses";
 
 /**
@@ -9,6 +10,12 @@ import { badRequest, ok, serverError } from "../../_lib/responses";
  */
 export async function GET(request: Request) {
   try {
+    const actor = await requireRole(["payroll_user", "payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { searchParams } = new URL(request.url);
     const periodStart = searchParams.get("periodStart");
     const periodEnd = searchParams.get("periodEnd");
@@ -75,6 +82,7 @@ export async function GET(request: Request) {
       .leftJoin(departments, eq(employees.departmentId, departments.id))
       .where(
         and(
+          eq(employees.organizationId, actor.organizationId ?? NO_MATCH),
           eq(employees.status, "active"),
           ...(departmentId ? [eq(employees.departmentId, departmentId)] : []),
         ),

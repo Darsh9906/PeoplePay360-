@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { salaryRules, salaryStructures } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
-import { isResponse, requireRole } from "../_lib/access";
+import { NO_MATCH, isResponse, requireRole } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const salaryStructureSchema = z.object({
@@ -33,7 +33,18 @@ const salaryStructureSchema = z.object({
 
 export async function GET() {
   try {
+    const reader = await requireRole([
+      "payroll_user",
+      "payroll_manager",
+      "admin",
+    ]);
+
+    if (isResponse(reader)) {
+      return reader;
+    }
+
     const rows = await db.query.salaryStructures.findMany({
+      where: eq(salaryStructures.organizationId, reader.organizationId ?? NO_MATCH),
       with: { rules: true },
       orderBy: asc(salaryStructures.name),
     });
@@ -61,6 +72,7 @@ export async function POST(request: Request) {
     const [structure] = await db
       .insert(salaryStructures)
       .values({
+        organizationId: actor.organizationId ?? NO_MATCH,
         name: parsed.data.name,
         code: parsed.data.code,
         isActive: parsed.data.isActive,
@@ -82,6 +94,7 @@ export async function POST(request: Request) {
     }
 
     await writeAuditLog({
+      actorUserId: actor.id,
       action: "create",
       entityType: "salary_structure",
       entityId: structure.id,

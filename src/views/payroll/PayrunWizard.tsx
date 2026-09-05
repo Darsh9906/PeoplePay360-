@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -48,8 +48,8 @@ type ScopeState = {
 /** Defaults the period to the previous whole month, which is the usual pay cycle. */
 function defaultPeriod() {
   const today = new Date()
-  const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))
-  const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0))
+  const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1))
+  const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0))
 
   return {
     periodStart: start.toISOString().slice(0, 10),
@@ -74,6 +74,7 @@ export default function PayrunWizard({
   onCancel: () => void
 }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const initialPeriod = defaultPeriod()
 
   const [step, setStep] = useState<1 | 2>(1)
@@ -111,6 +112,8 @@ export default function PayrunWizard({
   })
 
   const employees = useMemo(() => eligibleQuery.data ?? [], [eligibleQuery.data])
+  const defaultStructureId = structures[0]?.id ?? ""
+  const selectedStructureId = scope.salaryStructureId || defaultStructureId
   const selectable = useMemo(
     () => employees.filter((employee) => employee.eligible),
     [employees],
@@ -125,13 +128,13 @@ export default function PayrunWizard({
   )
 
   const structureName =
-    structures.find((structure) => structure.id === scope.salaryStructureId)?.name ??
+    structures.find((structure) => structure.id === selectedStructureId)?.name ??
     "Not set"
 
   function validateScope() {
     const nextErrors: Record<string, string> = {}
 
-    if (!scope.salaryStructureId) {
+    if (!selectedStructureId) {
       nextErrors.salaryStructureId = "Select the salary structure to apply"
     }
     if (!scope.periodStart) {
@@ -190,11 +193,12 @@ export default function PayrunWizard({
             `${periodLabel(scope.periodStart)} Payroll`,
           periodStart: scope.periodStart,
           periodEnd: scope.periodEnd,
-          salaryStructureId: scope.salaryStructureId,
+          salaryStructureId: selectedStructureId,
           employeeIds: selectedIds,
         }),
       })
 
+      await queryClient.invalidateQueries({ queryKey: ["payroll"] })
       router.push(`/payroll/payruns/${payrun.id}`)
     } catch (error) {
       setCreateError(
@@ -266,7 +270,7 @@ export default function PayrunWizard({
               Salary structure <span className="text-zinc-400">*</span>
             </label>
             <Select
-              value={scope.salaryStructureId}
+              value={selectedStructureId}
               onChange={(event) =>
                 setScope((current) => ({
                   ...current,
@@ -281,6 +285,11 @@ export default function PayrunWizard({
                 </option>
               ))}
             </Select>
+            {structures.length === 0 && (
+              <p className="mt-1 text-[11px] font-medium text-black">
+                No salary structure found. Create one in Salary Structures first.
+              </p>
+            )}
             {errors.salaryStructureId && (
               <p className="mt-1 text-[11px] font-medium text-black">
                 {errors.salaryStructureId}
