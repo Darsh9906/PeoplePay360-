@@ -1,4 +1,4 @@
-import TimeOff from "@/src/pages/timeoff/TimeOff"
+import TimeOff from "@/src/views/timeoff/TimeOff"
 
 export default function TimeOffPage() {
   return <TimeOff />

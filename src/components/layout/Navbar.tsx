@@ -1,13 +1,30 @@
 "use client"
 
 import { useApp } from "@/src/context/AppContext"
-import Link from "next/link"
-import { Menu, Bell, LogIn, Search } from "lucide-react"
+import { useAuth } from "@/src/context/AuthContext"
+import { labelForRole } from "@/src/lib/rbac"
+import { useRouter } from "next/navigation"
+import { Menu, Bell, LogOut, Search } from "lucide-react"
 
 export default function Navbar() {
+  const router = useRouter()
   const app = useApp()
+  const { user, logout } = useAuth()
   const sidebarOpen = app?.sidebarOpen ?? true
   const setSidebarOpen = app?.setSidebarOpen ?? (() => {})
+
+  const initials =
+    user?.name
+      ?.split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "U"
+
+  const handleLogout = async () => {
+    await logout()
+    router.push("/login")
+  }
 
   return (
     <header
@@ -45,22 +62,23 @@ export default function Navbar() {
           <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-black" />
         </button>
 
-        <Link
-          href="/login"
+        <button
+          onClick={handleLogout}
           className="flex h-9 items-center gap-2 rounded-md border border-zinc-300 bg-black px-3 text-xs font-semibold text-white transition hover:bg-zinc-800"
+          type="button"
         >
-          <LogIn className="h-4 w-4" />
-          <span className="hidden sm:inline">Login</span>
-        </Link>
+          <LogOut className="h-4 w-4" />
+          <span className="hidden sm:inline">Logout</span>
+        </button>
 
         <div className="flex items-center gap-2 border-l border-zinc-200 pl-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-black text-white font-bold text-xs border border-black">
-            DD
+            {initials}
           </div>
           <div className="hidden sm:flex flex-col text-left">
-            <span className="text-xs font-semibold leading-none text-black">Dhrumil</span>
+            <span className="text-xs font-semibold leading-none text-black">{user?.name ?? "User"}</span>
             <span className="text-[10px] text-zinc-500 leading-tight">
-              HR Manager
+              {labelForRole(user?.role)}
             </span>
           </div>
         </div>

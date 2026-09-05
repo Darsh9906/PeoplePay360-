@@ -2,12 +2,19 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { emailLogs } from "@/db/schema";
 
+type EmailAttachment = {
+  filename: string;
+  /** Base64-encoded file contents. */
+  content: string;
+};
+
 type SendEmailInput = {
   userId?: string;
   to: string;
   subject: string;
   html: string;
   text?: string;
+  attachments?: EmailAttachment[];
 };
 
 type ResendResponse = {
@@ -66,6 +73,9 @@ export async function sendEmail(input: SendEmailInput) {
         subject: input.subject,
         html: input.html,
         text: input.text,
+        ...(input.attachments?.length
+          ? { attachments: input.attachments }
+          : {}),
       }),
     });
 
@@ -161,5 +171,34 @@ export async function sendPasswordResetEmail(input: {
       <p>This reset link expires in 30 minutes.</p>
     `,
     text: `Hello ${input.name}, reset your PeoplePay360 password here: ${url}`,
+  });
+}
+
+export async function sendPayslipEmail(input: {
+  to: string;
+  employeeName: string;
+  payrunName: string;
+  periodStart: string;
+  periodEnd: string;
+  netPay: string;
+  currency?: string;
+  fileName: string;
+  pdfBase64: string;
+}) {
+  const currency = input.currency ?? "INR";
+  const period = `${input.periodStart} to ${input.periodEnd}`;
+
+  return sendEmail({
+    to: input.to,
+    subject: `Your payslip for ${input.payrunName}`,
+    html: `
+      <p>Hello ${input.employeeName},</p>
+      <p>Your payslip for <strong>${input.payrunName}</strong> (${period}) is attached.</p>
+      <p>Net salary credited: <strong>${currency} ${input.netPay}</strong></p>
+      <p>If anything looks incorrect, please contact the payroll team.</p>
+      <p>— PeoplePay360</p>
+    `,
+    text: `Hello ${input.employeeName}, your payslip for ${input.payrunName} (${period}) is attached. Net salary: ${currency} ${input.netPay}`,
+    attachments: [{ filename: input.fileName, content: input.pdfBase64 }],
   });
 }

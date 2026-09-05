@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { attendanceRecords, employees } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
+import { isResponse, resolveAccess } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const createAttendanceSchema = z.object({
@@ -16,12 +17,21 @@ const createAttendanceSchema = z.object({
 
 export async function GET(request: Request) {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const { searchParams } = new URL(request.url);
     const employeeId = searchParams.get("employeeId");
     const from = searchParams.get("from");
     const to = searchParams.get("to");
 
     const filters = [
+      access.scopeEmployeeId
+        ? eq(attendanceRecords.employeeId, access.scopeEmployeeId)
+        : undefined,
       employeeId ? eq(attendanceRecords.employeeId, employeeId) : undefined,
       from ? gte(attendanceRecords.attendanceDate, from) : undefined,
       to ? lte(attendanceRecords.attendanceDate, to) : undefined,

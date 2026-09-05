@@ -1,4 +1,4 @@
-import PayrunDetails from "@/src/pages/payroll/PayrunDetails"
+import PayrunDetails from "@/src/views/payroll/PayrunDetails"
 
 export default async function PayrunDetailsPage({
   params,

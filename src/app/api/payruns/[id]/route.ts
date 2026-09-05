@@ -6,12 +6,30 @@ import {
   payslipLines,
   payslips,
 } from "@/db/schema";
-import { notFound, ok, serverError } from "../../_lib/responses";
+import { isResponse, requireRole } from "../../_lib/access";
+import { writeAuditLog } from "../../_lib/audit";
+import {
+  badRequest,
+  noContent,
+  notFound,
+  ok,
+  serverError,
+} from "../../_lib/responses";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, ctx: Params) {
   try {
+    const actor = await requireRole([
+      "payroll_user",
+      "payroll_manager",
+      "admin",
+    ]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
 
     const payrun = await db.query.payruns.findFirst({
@@ -70,6 +88,48 @@ export async function GET(_request: Request, ctx: Params) {
         .where(eq(payslips.payrunId, id))
         .then((rows) => rows[0]?.count ?? 0),
     });
+  } catch (error) {
+    return serverError(error);
+  }
+}
+
+export async function DELETE(_request: Request, ctx: Params) {
+  try {
+    const actor = await requireRole([
+      "payroll_user",
+      "payroll_manager",
+      "admin",
+    ]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
+    const { id } = await ctx.params;
+
+    const payrun = await db.query.payruns.findFirst({
+      where: eq(payruns.id, id),
+    });
+
+    if (!payrun) {
+      return notFound("Payrun not found");
+    }
+
+    // Paid payruns are historical records and must be preserved.
+    if (payrun.status === "paid") {
+      return badRequest("A paid payrun cannot be deleted");
+    }
+
+    await db.delete(payruns).where(eq(payruns.id, id));
+
+    await writeAuditLog({
+      action: "delete",
+      entityType: "payrun",
+      entityId: id,
+      summary: `Deleted payrun ${payrun.name}`,
+    });
+
+    return noContent();
   } catch (error) {
     return serverError(error);
   }

@@ -3,6 +3,8 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useApp } from "@/src/context/AppContext"
+import { useAuth } from "@/src/context/AuthContext"
+import { canAccessPath, labelForRole } from "@/src/lib/rbac"
 import {
   Users,
   FileText,
@@ -20,6 +22,7 @@ import {
 export default function Sidebar() {
   const pathname = usePathname()
   const app = useApp()
+  const { user } = useAuth()
   const sidebarOpen = app?.sidebarOpen ?? true
   const setSidebarOpen = app?.setSidebarOpen ?? (() => {})
 
@@ -68,7 +71,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {navItems.map((item) => {
+        {navItems.filter((item) => item.disabled || canAccessPath(item.href, user?.role)).map((item) => {
           const Icon = item.icon
           const isActive =
             item.href !== "#" &&
@@ -134,10 +137,10 @@ export default function Sidebar() {
         <div className="p-3 m-3 rounded-md bg-zinc-950 border border-zinc-800 text-xs">
           <div className="flex items-center gap-2 text-zinc-200 font-medium mb-1">
             <Shield className="h-3.5 w-3.5" />
-            <span>Frontend Task Mode</span>
+            <span>{labelForRole(user?.role)}</span>
           </div>
           <p className="text-[11px] text-zinc-400 leading-tight">
-            Employee List &amp; Contracts modules.
+            Role based workspace access is active.
           </p>
         </div>
       )}

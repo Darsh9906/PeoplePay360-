@@ -4,10 +4,14 @@ import { db } from "@/db";
 import {
   contracts,
   departments,
+  employeeWorkingSchedules,
   employees,
   salaryStructures,
+  workingSchedules,
 } from "@/db/schema";
+import { scheduleTypeLabel } from "@/lib/schedule/hours";
 import { writeAuditLog } from "../_lib/audit";
+import { isResponse, resolveAccess } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const createContractSchema = z.object({
@@ -28,6 +32,12 @@ function getDisplayStatus(status: "active" | "expired" | "terminated") {
 
 export async function GET() {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const rows = await db
       .select({
         id: contracts.id,
@@ -43,6 +53,8 @@ export async function GET() {
         currency: contracts.currency,
         salaryStructureId: contracts.salaryStructureId,
         salaryStructure: salaryStructures.name,
+        scheduleName: workingSchedules.name,
+        weeklyHours: workingSchedules.weeklyHours,
       })
       .from(contracts)
       .innerJoin(employees, eq(contracts.employeeId, employees.id))
@@ -51,14 +63,28 @@ export async function GET() {
         salaryStructures,
         eq(contracts.salaryStructureId, salaryStructures.id),
       )
+      .leftJoin(
+        employeeWorkingSchedules,
+        eq(employeeWorkingSchedules.employeeId, contracts.employeeId),
+      )
+      .leftJoin(
+        workingSchedules,
+        eq(workingSchedules.id, employeeWorkingSchedules.scheduleId),
+      )
+      .where(
+        access.scopeEmployeeId
+          ? eq(contracts.employeeId, access.scopeEmployeeId)
+          : undefined,
+      )
       .orderBy(desc(contracts.startDate));
 
     return ok(
       rows.map((contract) => ({
         ...contract,
-        contractType: "Full Time",
+        // Derived from the employee's assigned schedule, not assumed.
+        contractType: scheduleTypeLabel(Number(contract.weeklyHours)),
         salary: Number(contract.monthlyWage),
-        workingSchedule: "Standard 40h/week",
+        workingSchedule: contract.scheduleName ?? "No schedule assigned",
         endDate: contract.endDate ?? "Ongoing",
         displayStatus: getDisplayStatus(contract.status),
       })),

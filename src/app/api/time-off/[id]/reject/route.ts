@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { approvals, timeOffRequests } from "@/db/schema";
+import { releaseAllocation } from "@/lib/payroll/compute";
 import { writeAuditLog } from "../../../_lib/audit";
 import { badRequest, notFound, ok, serverError } from "../../../_lib/responses";
 
@@ -21,10 +22,14 @@ export async function POST(request: Request, ctx: Params) {
       return badRequest(parsed.error.issues[0]?.message ?? "Invalid request");
     }
 
+    // Refusing an already-approved request gives the days back to the allocation.
+    await releaseAllocation(id);
+
     const [requestRecord] = await db
       .update(timeOffRequests)
       .set({
         status: "refused",
+        allocationId: null,
         reviewedBy: parsed.data.reviewedBy,
         reviewedAt: new Date(),
         rejectedReason: parsed.data.rejectedReason,

@@ -1,4 +1,4 @@
-import PayrollHealth from "@/src/pages/payroll/PayrollHealth"
+import PayrollHealth from "@/src/views/payroll/PayrollHealth"
 
 export default function PayrollHealthPage() {
   return <PayrollHealth />

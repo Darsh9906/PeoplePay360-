@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { salaryRules } from "@/db/schema";
 import { writeAuditLog } from "../../_lib/audit";
+import { isResponse, requireRole } from "../../_lib/access";
 import { badRequest, noContent, notFound, ok, serverError } from "../../_lib/responses";
 
 type Params = { params: Promise<{ id: string }> };
@@ -10,7 +11,14 @@ type Params = { params: Promise<{ id: string }> };
 const updateSalaryRuleSchema = z.object({
   name: z.string().min(1).optional(),
   code: z.string().min(1).optional(),
-  category: z.enum(["earning", "deduction", "net"]).optional(),
+  category: z.enum([
+    "basic",
+    "allowance",
+    "earning",
+    "gross",
+    "deduction",
+    "net",
+  ]).optional(),
   sequence: z.coerce.number().int().optional(),
   amount: z.coerce.number().optional(),
   percentageBaseCode: z.string().nullable().optional(),
@@ -36,6 +44,12 @@ export async function GET(_request: Request, ctx: Params) {
 
 export async function PATCH(request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
     const parsed = updateSalaryRuleSchema.safeParse(await request.json());
 
@@ -71,6 +85,12 @@ export async function PATCH(request: Request, ctx: Params) {
 
 export async function DELETE(_request: Request, ctx: Params) {
   try {
+    const actor = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const { id } = await ctx.params;
     await db.delete(salaryRules).where(eq(salaryRules.id, id));
     await writeAuditLog({

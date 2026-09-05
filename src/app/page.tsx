@@ -1,5 +1,5 @@
-import EmployeeList from "@/src/pages/employees/list/EmployeeList"
+import { redirect } from "next/navigation"
 
 export default function Home() {
-  return <EmployeeList />
+  redirect("/dashboard")
 }

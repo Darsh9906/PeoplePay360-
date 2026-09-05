@@ -1,4 +1,4 @@
-import SalaryRuleDetails from "@/src/pages/payroll/SalaryRuleDetails"
+import SalaryRuleDetails from "@/src/views/payroll/SalaryRuleDetails"
 
 export default async function SalaryRuleDetailsPage({
   params,

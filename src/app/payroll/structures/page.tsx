@@ -1,4 +1,4 @@
-import SalaryStructures from "@/src/pages/payroll/SalaryStructures"
+import SalaryStructures from "@/src/views/payroll/SalaryStructures"
 
 export default function SalaryStructuresPage() {
   return <SalaryStructures />

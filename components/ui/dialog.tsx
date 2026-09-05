@@ -8,9 +8,11 @@ export interface DialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   children: React.ReactNode
+  /** Overrides the panel width for dialogs holding wide content. */
+  className?: string
 }
 
-function Dialog({ open, onOpenChange, children }: DialogProps) {
+function Dialog({ open, onOpenChange, children, className }: DialogProps) {
   if (!open) return null
 
   return (
@@ -19,7 +21,12 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
         className="fixed inset-0"
         onClick={() => onOpenChange(false)}
       />
-      <div className="relative z-50 w-full max-w-lg rounded-md border border-zinc-300 bg-white p-6 shadow-xl sm:max-w-xl">
+      <div
+        className={cn(
+          "relative z-50 max-h-[90vh] w-full overflow-y-auto rounded-md border border-zinc-300 bg-white p-6 shadow-xl",
+          className ?? "max-w-lg sm:max-w-xl"
+        )}
+      >
         <button
           onClick={() => onOpenChange(false)}
           className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:pointer-events-none"

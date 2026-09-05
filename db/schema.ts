@@ -63,7 +63,10 @@ export const payrunStatusEnum = pgEnum("payrun_status", [
 ]);
 
 export const salaryRuleCategoryEnum = pgEnum("salary_rule_category", [
+  "basic",
+  "allowance",
   "earning",
+  "gross",
   "deduction",
   "net",
 ]);
@@ -71,6 +74,14 @@ export const salaryRuleCategoryEnum = pgEnum("salary_rule_category", [
 export const scheduleStatusEnum = pgEnum("schedule_status", [
   "active",
   "inactive",
+]);
+
+export const timeOffUnitEnum = pgEnum("time_off_unit", ["days", "hours"]);
+
+export const allocationStatusEnum = pgEnum("allocation_status", [
+  "draft",
+  "approved",
+  "refused",
 ]);
 
 export const approvalEntityEnum = pgEnum("approval_entity", [
@@ -249,6 +260,9 @@ export const workingSchedules = pgTable(
     timezone: varchar("timezone", { length: 80 })
       .notNull()
       .default("Asia/Kolkata"),
+    weeklyHours: numeric("weekly_hours", { precision: 6, scale: 2 })
+      .notNull()
+      .default("0.00"),
     status: scheduleStatusEnum("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -256,6 +270,25 @@ export const workingSchedules = pgTable(
   },
   (table) => ({
     nameIdx: uniqueIndex("working_schedules_name_idx").on(table.name),
+  }),
+);
+
+export const workingScheduleLines = pgTable(
+  "working_schedule_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    scheduleId: uuid("schedule_id")
+      .notNull()
+      .references(() => workingSchedules.id, { onDelete: "cascade" }),
+    dayOfWeek: integer("day_of_week").notNull(),
+    startTime: varchar("start_time", { length: 5 }).notNull(),
+    endTime: varchar("end_time", { length: 5 }).notNull(),
+    breakMinutes: integer("break_minutes").notNull().default(0),
+  },
+  (table) => ({
+    scheduleIdx: index("working_schedule_lines_schedule_idx").on(
+      table.scheduleId,
+    ),
   }),
 );
 
@@ -353,6 +386,60 @@ export const attendanceRecords = pgTable(
   }),
 );
 
+export const timeOffTypes = pgTable(
+  "time_off_types",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 120 }).notNull(),
+    code: varchar("code", { length: 30 }).notNull(),
+    unit: timeOffUnitEnum("unit").notNull().default("days"),
+    requiresAllocation: boolean("requires_allocation").notNull().default(true),
+    requiresApproval: boolean("requires_approval").notNull().default(true),
+    isPaid: boolean("is_paid").notNull().default(true),
+    affectsPayroll: boolean("affects_payroll").notNull().default(true),
+    colorHex: varchar("color_hex", { length: 9 }).notNull().default("#2563eb"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    codeIdx: uniqueIndex("time_off_types_code_idx").on(table.code),
+  }),
+);
+
+export const leaveAllocations = pgTable(
+  "leave_allocations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    timeOffTypeId: uuid("time_off_type_id")
+      .notNull()
+      .references(() => timeOffTypes.id, { onDelete: "cascade" }),
+    allocatedDays: numeric("allocated_days", { precision: 6, scale: 2 })
+      .notNull()
+      .default("0.00"),
+    consumedDays: numeric("consumed_days", { precision: 6, scale: 2 })
+      .notNull()
+      .default("0.00"),
+    status: allocationStatusEnum("status").notNull().default("draft"),
+    validFrom: date("valid_from").notNull(),
+    validTo: date("valid_to"),
+    notes: text("notes"),
+    approvedBy: uuid("approved_by").references(() => users.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    employeeIdx: index("leave_allocations_employee_idx").on(table.employeeId),
+    typeIdx: index("leave_allocations_type_idx").on(table.timeOffTypeId),
+  }),
+);
+
 export const timeOffRequests = pgTable(
   "time_off_requests",
   {
@@ -361,6 +448,8 @@ export const timeOffRequests = pgTable(
       .notNull()
       .references(() => employees.id, { onDelete: "cascade" }),
     typeName: varchar("type_name", { length: 80 }).notNull(),
+    timeOffTypeId: uuid("time_off_type_id").references(() => timeOffTypes.id),
+    allocationId: uuid("allocation_id").references(() => leaveAllocations.id),
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
     durationDays: numeric("duration_days", { precision: 6, scale: 2 }).notNull(),
@@ -774,6 +863,17 @@ export const workingSchedulesRelations = relations(
   workingSchedules,
   ({ many }) => ({
     employees: many(employeeWorkingSchedules),
+    lines: many(workingScheduleLines),
+  }),
+);
+
+export const workingScheduleLinesRelations = relations(
+  workingScheduleLines,
+  ({ one }) => ({
+    schedule: one(workingSchedules, {
+      fields: [workingScheduleLines.scheduleId],
+      references: [workingSchedules.id],
+    }),
   }),
 );
 
@@ -797,6 +897,7 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   contracts: many(contracts),
   attendanceRecords: many(attendanceRecords),
   timeOffRequests: many(timeOffRequests),
+  leaveAllocations: many(leaveAllocations),
   payslips: many(payslips),
   workingSchedules: many(employeeWorkingSchedules),
   bankAccounts: many(employeeBankAccounts),
@@ -840,10 +941,43 @@ export const attendanceRelations = relations(attendanceRecords, ({ one }) => ({
   }),
 }));
 
+export const timeOffTypesRelations = relations(timeOffTypes, ({ many }) => ({
+  requests: many(timeOffRequests),
+  allocations: many(leaveAllocations),
+}));
+
+export const leaveAllocationsRelations = relations(
+  leaveAllocations,
+  ({ one, many }) => ({
+    employee: one(employees, {
+      fields: [leaveAllocations.employeeId],
+      references: [employees.id],
+    }),
+    timeOffType: one(timeOffTypes, {
+      fields: [leaveAllocations.timeOffTypeId],
+      references: [timeOffTypes.id],
+    }),
+    approver: one(users, {
+      fields: [leaveAllocations.approvedBy],
+      references: [users.id],
+      relationName: "allocation_approver",
+    }),
+    requests: many(timeOffRequests),
+  }),
+);
+
 export const timeOffRelations = relations(timeOffRequests, ({ one }) => ({
   employee: one(employees, {
     fields: [timeOffRequests.employeeId],
     references: [employees.id],
+  }),
+  timeOffType: one(timeOffTypes, {
+    fields: [timeOffRequests.timeOffTypeId],
+    references: [timeOffTypes.id],
+  }),
+  allocation: one(leaveAllocations, {
+    fields: [timeOffRequests.allocationId],
+    references: [leaveAllocations.id],
   }),
   reviewer: one(users, {
     fields: [timeOffRequests.reviewedBy],
@@ -1049,6 +1183,9 @@ export type Payrun = typeof payruns.$inferSelect;
 export type Payslip = typeof payslips.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type WorkingSchedule = typeof workingSchedules.$inferSelect;
+export type WorkingScheduleLine = typeof workingScheduleLines.$inferSelect;
+export type TimeOffType = typeof timeOffTypes.$inferSelect;
+export type LeaveAllocation = typeof leaveAllocations.$inferSelect;
 export type TimeOffRequest = typeof timeOffRequests.$inferSelect;
 export type PaymentBatch = typeof paymentBatches.$inferSelect;
 export type PaymentTransaction = typeof paymentTransactions.$inferSelect;

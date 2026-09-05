@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { departments, employees } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
+import { isResponse, resolveAccess } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const createEmployeeSchema = z.object({
@@ -19,6 +20,12 @@ const createEmployeeSchema = z.object({
 
 export async function GET() {
   try {
+    const access = await resolveAccess();
+
+    if (isResponse(access)) {
+      return access;
+    }
+
     const rows = await db
       .select({
         id: employees.id,
@@ -33,6 +40,11 @@ export async function GET() {
       })
       .from(employees)
       .innerJoin(departments, eq(employees.departmentId, departments.id))
+      .where(
+        access.scopeEmployeeId
+          ? eq(employees.id, access.scopeEmployeeId)
+          : undefined,
+      )
       .orderBy(asc(employees.employeeCode));
 
     return ok(

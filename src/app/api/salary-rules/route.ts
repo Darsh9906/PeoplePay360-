@@ -3,13 +3,21 @@ import { z } from "zod";
 import { db } from "@/db";
 import { salaryRules } from "@/db/schema";
 import { writeAuditLog } from "../_lib/audit";
+import { isResponse, requireRole } from "../_lib/access";
 import { badRequest, created, ok, serverError } from "../_lib/responses";
 
 const salaryRuleSchema = z.object({
   structureId: z.string().uuid(),
   name: z.string().min(1),
   code: z.string().min(1),
-  category: z.enum(["earning", "deduction", "net"]),
+  category: z.enum([
+    "basic",
+    "allowance",
+    "earning",
+    "gross",
+    "deduction",
+    "net",
+  ]),
   sequence: z.coerce.number().int(),
   amount: z.coerce.number(),
   percentageBaseCode: z.string().nullable().optional(),
@@ -34,6 +42,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const actor = await requireRole(["payroll_manager", "admin"]);
+
+    if (isResponse(actor)) {
+      return actor;
+    }
+
     const parsed = salaryRuleSchema.safeParse(await request.json());
 
     if (!parsed.success) {
