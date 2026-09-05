@@ -1,4 +1,5 @@
 import { desc, eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import {
   contracts,
@@ -6,7 +7,19 @@ import {
   employees,
   salaryStructures,
 } from "@/db/schema";
-import { ok, serverError } from "../_lib/responses";
+import { writeAuditLog } from "../_lib/audit";
+import { badRequest, created, ok, serverError } from "../_lib/responses";
+
+const createContractSchema = z.object({
+  employeeId: z.string().uuid(),
+  startDate: z.string().min(1),
+  endDate: z.string().nullable().optional(),
+  status: z.enum(["active", "expired", "terminated"]).default("active"),
+  monthlyWage: z.coerce.number().positive(),
+  currency: z.string().length(3).default("INR"),
+  salaryStructureId: z.string().uuid().nullable().optional(),
+  notes: z.string().optional(),
+});
 
 function getDisplayStatus(status: "active" | "expired" | "terminated") {
   if (status === "active") return "Running";
@@ -50,6 +63,35 @@ export async function GET() {
         displayStatus: getDisplayStatus(contract.status),
       })),
     );
+  } catch (error) {
+    return serverError(error);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const parsed = createContractSchema.safeParse(await request.json());
+
+    if (!parsed.success) {
+      return badRequest(parsed.error.issues[0]?.message ?? "Invalid request");
+    }
+
+    const [contract] = await db
+      .insert(contracts)
+      .values({
+        ...parsed.data,
+        monthlyWage: parsed.data.monthlyWage.toFixed(2),
+      })
+      .returning();
+
+    await writeAuditLog({
+      action: "create",
+      entityType: "contract",
+      entityId: contract.id,
+      summary: "Created contract",
+    });
+
+    return created(contract);
   } catch (error) {
     return serverError(error);
   }
