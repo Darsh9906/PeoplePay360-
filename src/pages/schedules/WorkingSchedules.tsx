@@ -20,7 +20,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Clock, XCircle, Trash2, Edit2, Eye, Calendar } from "lucide-react"
+import { Plus, XCircle, Trash2, Edit2, Eye } from "lucide-react"
 
 export interface Schedule {
   id: string
@@ -348,7 +348,7 @@ export default function WorkingSchedules() {
                       No working schedules found
                     </p>
                     <p className="text-xs text-zinc-500 max-w-sm">
-                      There are no working schedules created yet. Click "Add Working Schedule" to create a shift pattern.
+                      There are no working schedules created yet. Click &quot;Add Working Schedule&quot; to create a shift pattern.
                     </p>
                   </div>
                 </TableCell>

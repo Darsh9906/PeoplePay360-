@@ -29,15 +29,84 @@ import {
 } from "@/src/data/mockData"
 import { Plus, Search, Filter, XCircle, Mail, Phone } from "lucide-react"
 
+type EmployeeApiRow = {
+  id: string
+  employeeCode: string
+  firstName: string
+  lastName: string
+  workEmail: string
+  jobTitle: string
+  status: "active" | "inactive" | "terminated"
+  department: string
+}
+
+type EmployeesApiResponse = {
+  data: EmployeeApiRow[]
+}
+
+function mapEmployeeFromApi(employee: EmployeeApiRow): Employee {
+  const statusMap: Record<EmployeeApiRow["status"], Employee["status"]> = {
+    active: "Active",
+    inactive: "Inactive",
+    terminated: "Inactive",
+  }
+
+  return {
+    id: employee.id,
+    employeeCode: employee.employeeCode,
+    firstName: employee.firstName,
+    lastName: employee.lastName,
+    email: employee.workEmail,
+    phone: "-",
+    department: employee.department,
+    position: employee.jobTitle,
+    contractType: "Full-time",
+    status: statusMap[employee.status],
+  }
+}
+
 export default function EmployeeList() {
-  // Starts with NO dummy/fake records as requested
   const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES)
-    useEffect(() => {
-      const savedEmployees = window.localStorage.getItem("peoplepay360-employees")
-      if (savedEmployees) {
-        window.setTimeout(() => setEmployees(JSON.parse(savedEmployees)), 0)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadEmployees() {
+      try {
+        setIsLoading(true)
+        setLoadError("")
+
+        const response = await fetch("/api/employees", {
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error("Unable to load employees")
+        }
+
+        const payload = (await response.json()) as EmployeesApiResponse
+        const savedEmployees = window.localStorage.getItem("peoplepay360-employees")
+        const localEmployees = savedEmployees ? JSON.parse(savedEmployees) as Employee[] : []
+        setEmployees([...localEmployees, ...payload.data.map(mapEmployeeFromApi)])
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return
+        }
+
+        setLoadError("Could not load employees from backend.")
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false)
+        }
       }
-    }, [])
+    }
+
+    loadEmployees()
+
+    return () => controller.abort()
+  }, [])
 
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedDepartment, setSelectedDepartment] = useState("ALL")
@@ -239,7 +308,29 @@ export default function EmployeeList() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredEmployees.length > 0 ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-40 text-center">
+                  <p className="text-sm font-medium text-zinc-500">
+                    Loading employee records...
+                  </p>
+                </TableCell>
+              </TableRow>
+            ) : loadError ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-40 text-center">
+                  <div className="flex flex-col items-center justify-center text-zinc-500 space-y-2 py-6">
+                    <XCircle className="h-10 w-10 text-zinc-300" />
+                    <p className="text-base font-semibold text-black">
+                      Backend data unavailable
+                    </p>
+                    <p className="text-xs text-zinc-500 max-w-sm">
+                      {loadError}
+                    </p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredEmployees.length > 0 ? (
               filteredEmployees.map((emp) => {
                 const badgeVariant =
                   emp.status === "Active"
@@ -262,7 +353,7 @@ export default function EmployeeList() {
                               {emp.firstName} {emp.lastName}
                             </div>
                             <div className="text-xs text-zinc-500 font-mono">
-                              {emp.id}
+                              {emp.employeeCode ?? emp.id}
                             </div>
                           </div>
                         </Link>

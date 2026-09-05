@@ -20,7 +20,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Search, Filter, XCircle, Trash2, Edit2, Eye, Calendar, Clock, User } from "lucide-react"
+import { Plus, Search, Filter, XCircle, Trash2, Edit2, Eye, Calendar, User } from "lucide-react"
 
 export interface AttendanceRecord {
   id: string
@@ -385,7 +385,7 @@ export default function Attendance() {
                       No attendance records found
                     </p>
                     <p className="text-xs text-zinc-500 max-w-sm">
-                      There are no attendance records logged yet. Click "Add Attendance" to log check-in/out entries.
+                      There are no attendance records logged yet. Click &quot;Add Attendance&quot; to log check-in/out entries.
                     </p>
                   </div>
                 </TableCell>
