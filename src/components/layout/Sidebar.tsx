@@ -24,7 +24,7 @@ export default function Sidebar() {
   const setSidebarOpen = app?.setSidebarOpen ?? (() => {})
 
   const navItems = [
-    { label: "Dashboard", href: "/", icon: LayoutDashboard },
+    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Employees", href: "/employees", icon: Users, badge: "HR Ops" },
     { label: "Contracts", href: "/contracts", icon: FileText, badge: "HR Ops" },
     { label: "Attendance", href: "/attendance", icon: Clock },

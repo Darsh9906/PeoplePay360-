@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -31,6 +32,13 @@ import { Plus, Search, Filter, XCircle, Mail, Phone } from "lucide-react"
 export default function EmployeeList() {
   // Starts with NO dummy/fake records as requested
   const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES)
+    useEffect(() => {
+      const savedEmployees = window.localStorage.getItem("peoplepay360-employees")
+      if (savedEmployees) {
+        window.setTimeout(() => setEmployees(JSON.parse(savedEmployees)), 0)
+      }
+    }, [])
+
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedDepartment, setSelectedDepartment] = useState("ALL")
   const [selectedStatus, setSelectedStatus] = useState("ALL")
@@ -114,7 +122,9 @@ export default function EmployeeList() {
       status: formData.status,
     }
 
-    setEmployees((prev) => [newEmp, ...prev])
+    const nextEmployees = [newEmp, ...employees]
+    window.localStorage.setItem("peoplepay360-employees", JSON.stringify(nextEmployees))
+    setEmployees(nextEmployees)
     setIsModalOpen(false)
     resetForm()
   }
@@ -242,18 +252,20 @@ export default function EmployeeList() {
                   <TableRow key={emp.id} className="border-zinc-200 hover:bg-zinc-50">
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-100 text-black font-bold text-xs border border-zinc-300">
-                          {emp.firstName[0]}
-                          {emp.lastName[0]}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-black">
-                            {emp.firstName} {emp.lastName}
+                        <Link href={`/employees/${emp.id}`} className="flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-100 text-black font-bold text-xs border border-zinc-300">
+                            {emp.firstName[0]}
+                            {emp.lastName[0]}
                           </div>
-                          <div className="text-xs text-zinc-500 font-mono">
-                            {emp.id}
+                          <div>
+                            <div className="font-semibold text-black hover:underline">
+                              {emp.firstName} {emp.lastName}
+                            </div>
+                            <div className="text-xs text-zinc-500 font-mono">
+                              {emp.id}
+                            </div>
                           </div>
-                        </div>
+                        </Link>
                       </div>
                     </TableCell>
 
