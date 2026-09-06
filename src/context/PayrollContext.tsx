@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useMemo } from "react"
+import React, { createContext, useCallback, useContext, useMemo } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiRequest } from "@/src/lib/api"
 
@@ -505,7 +505,7 @@ export function PayrollProvider({ children }: { children: React.ReactNode }) {
     onSuccess: invalidatePayroll,
   })
 
-  const addPayrun = async (data: PayrunCreateInput) => {
+  const addPayrun = useCallback(async (data: PayrunCreateInput) => {
     const payrun = await addPayrunMutation.mutateAsync(data)
     return {
       id: payrun.id,
@@ -521,50 +521,69 @@ export function PayrollProvider({ children }: { children: React.ReactNode }) {
       createdAt: formatDate(payrun.createdAt),
       employees: [],
     }
-  }
+  }, [addPayrunMutation, structureNameById])
 
-  const updatePayrunStatus = async (id: string, newStatus: PayrunRecord["status"]) => {
+  const updatePayrunStatus = useCallback(async (id: string, newStatus: PayrunRecord["status"]) => {
     await updatePayrunStatusMutation.mutateAsync({ id, status: newStatus })
-  }
+  }, [updatePayrunStatusMutation])
 
-  const addSalaryStructure = async (data: Omit<SalaryStructureRecord, "id" | "ruleCount">) => {
+  const addSalaryStructure = useCallback(async (data: Omit<SalaryStructureRecord, "id" | "ruleCount">) => {
     const structure = await addStructureMutation.mutateAsync(data)
     return mapStructure(structure, rules)
-  }
+  }, [addStructureMutation, rules])
 
-  const addSalaryRule = async (data: Omit<SalaryRuleRecord, "id">) => {
+  const addSalaryRule = useCallback(async (data: Omit<SalaryRuleRecord, "id">) => {
     const rule = await addRuleMutation.mutateAsync(data)
     return mapRule(rule, data.structureName)
-  }
+  }, [addRuleMutation])
 
-  const resolveAnomaly = (id: string) => {
+  const resolveAnomaly = useCallback((id: string) => {
     queryClient.setQueryData<BackendWarning[]>(["payroll", "warnings"], (current) =>
       (current ?? []).filter((warning) => warning.id !== id)
     )
-  }
+  }, [queryClient])
 
-  const value = {
-    payruns,
-    payslips,
-    structures,
-    rules,
-    anomalies,
-    isLoading:
-      payrunsQuery.isLoading ||
-      payslipsQuery.isLoading ||
-      structuresQuery.isLoading ||
-      rulesQuery.isLoading ||
+  const value = useMemo(
+    () => ({
+      payruns,
+      payslips,
+      structures,
+      rules,
+      anomalies,
+      isLoading:
+        payrunsQuery.isLoading ||
+        payslipsQuery.isLoading ||
+        structuresQuery.isLoading ||
+        rulesQuery.isLoading ||
+        warningsQuery.isLoading,
+      addPayrun,
+      updatePayrunStatus,
+      getPayrunById: (id: string) => payruns.find((payrun) => payrun.id === id),
+      getPayslipById: (id: string) => payslips.find((payslip) => payslip.id === id),
+      addSalaryStructure,
+      addSalaryRule,
+      getStructureById: (id: string) => structures.find((structure) => structure.id === id),
+      getRuleById: (id: string) => rules.find((rule) => rule.id === id),
+      resolveAnomaly,
+    }),
+    [
+      payruns,
+      payslips,
+      structures,
+      rules,
+      anomalies,
+      payrunsQuery.isLoading,
+      payslipsQuery.isLoading,
+      structuresQuery.isLoading,
+      rulesQuery.isLoading,
       warningsQuery.isLoading,
-    addPayrun,
-    updatePayrunStatus,
-    getPayrunById: (id: string) => payruns.find((payrun) => payrun.id === id),
-    getPayslipById: (id: string) => payslips.find((payslip) => payslip.id === id),
-    addSalaryStructure,
-    addSalaryRule,
-    getStructureById: (id: string) => structures.find((structure) => structure.id === id),
-    getRuleById: (id: string) => rules.find((rule) => rule.id === id),
-    resolveAnomaly,
-  }
+      addPayrun,
+      updatePayrunStatus,
+      addSalaryStructure,
+      addSalaryRule,
+      resolveAnomaly,
+    ],
+  )
 
   return <PayrollContext.Provider value={value}>{children}</PayrollContext.Provider>
 }

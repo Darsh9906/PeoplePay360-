@@ -205,6 +205,7 @@ export default function WorkingSchedules() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employee-schedules"] })
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
       setSelectedEmployeeId("")
       setAssignError("")
     },
@@ -218,6 +219,7 @@ export default function WorkingSchedules() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employee-schedules"] })
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
       setAssignError("")
     },
     onError: (error: Error) => setAssignError(error.message),

@@ -14,8 +14,14 @@ export async function apiRequest<T>(
   const payload = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(payload?.error ?? `Request failed with ${response.status}`)
+    const errorMsg =
+      payload?.error ||
+      payload?.message ||
+      (Array.isArray(payload?.errors) ? payload.errors.map((e: { message?: string } | string) => (typeof e === "object" && e?.message ? e.message : String(e))).join(", ") : null) ||
+      `Request failed with status ${response.status}`
+
+    throw new Error(errorMsg)
   }
 
-  return (payload?.data ?? payload) as T
+  return (payload?.data !== undefined ? payload.data : payload) as T
 }

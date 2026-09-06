@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { apiRequest } from "@/src/lib/api"
-import OfficeNetworkPanel from "@/src/components/attendance/OfficeNetworkPanel"
 import {
   Table,
   TableHeader,
@@ -332,9 +331,6 @@ export default function Attendance() {
           Add Attendance
         </Button>
       </div>
-
-      {/* Office Network Verification + self Check In / Check Out */}
-      <OfficeNetworkPanel />
 
       {/* Filter Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white p-4 rounded-xl border border-zinc-300 shadow-sm">

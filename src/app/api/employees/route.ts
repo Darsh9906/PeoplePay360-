@@ -1,4 +1,5 @@
 import { and, asc, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { db } from "@/db";
 import { departments, employees, employeeWorkingSchedules, workingSchedules } from "@/db/schema";
@@ -11,6 +12,8 @@ import {
   ok,
   serverError,
 } from "../_lib/responses";
+
+const managers = alias(employees, "managers");
 
 const createEmployeeSchema = z.object({
   employeeCode: z.string().min(1),
@@ -43,10 +46,7 @@ export async function GET() {
         status: employees.status,
         hireDate: employees.hireDate,
         department: departments.name,
-        managerName: sql<string | null>`(
-          select concat(m.first_name, ' ', m.last_name)
-          from ${employees} m where m.id = ${employees.managerId}
-        )`,
+        managerName: sql<string | null>`nullif(trim(concat(${managers.firstName}, ' ', ${managers.lastName})), '')`,
         scheduleName: sql<string | null>`(
           select ${workingSchedules.name}
           from ${employeeWorkingSchedules}
@@ -58,6 +58,7 @@ export async function GET() {
       })
       .from(employees)
       .innerJoin(departments, eq(employees.departmentId, departments.id))
+      .leftJoin(managers, eq(employees.managerId, managers.id))
       .where(
         and(
           eq(employees.organizationId, access.organizationId),

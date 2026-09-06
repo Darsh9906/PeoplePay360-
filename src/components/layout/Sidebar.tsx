@@ -27,6 +27,8 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import { apiRequest } from "@/src/lib/api"
 import { useApp } from "@/src/context/AppContext"
 import { useAuth } from "@/src/context/AuthContext"
 import { LogoMark } from "@/src/components/brand/Logo"
@@ -75,9 +77,25 @@ export default function Sidebar() {
   const pathname = usePathname() ?? "/"
   const app = useApp()
   const { user } = useAuth()
+  const queryClient = useQueryClient()
 
   const sidebarOpen = app?.sidebarOpen ?? true
   const setSidebarOpen = app?.setSidebarOpen ?? (() => {})
+
+  const handlePrefetch = (href: string) => {
+    if (href === "/employees") {
+      queryClient.prefetchQuery({ queryKey: ["employees"], queryFn: () => apiRequest("/api/employees") })
+    } else if (href === "/attendance") {
+      queryClient.prefetchQuery({ queryKey: ["attendance"], queryFn: () => apiRequest("/api/attendance") })
+    } else if (href === "/me/attendance") {
+      queryClient.prefetchQuery({ queryKey: ["my-attendance"], queryFn: () => apiRequest("/api/attendance") })
+    } else if (href === "/schedules") {
+      queryClient.prefetchQuery({ queryKey: ["schedules"], queryFn: () => apiRequest("/api/schedules") })
+      queryClient.prefetchQuery({ queryKey: ["employee-schedules"], queryFn: () => apiRequest("/api/employee-schedules") })
+    } else if (href.startsWith("/payroll")) {
+      queryClient.prefetchQuery({ queryKey: ["payruns"], queryFn: () => apiRequest("/api/payruns") })
+    }
+  }
 
   // The role decides the entire menu — nothing is rendered then hidden.
   const items = navigationForRole(user?.role)
@@ -156,6 +174,7 @@ export default function Sidebar() {
 
               <Link
                 href={item.href}
+                onMouseEnter={() => handlePrefetch(item.href)}
                 title={sidebarOpen ? undefined : item.label}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition-all duration-200 ${
                   active
@@ -177,6 +196,7 @@ export default function Sidebar() {
                       <Link
                         key={child.href}
                         href={child.href}
+                        onMouseEnter={() => handlePrefetch(child.href)}
                         className={`relative block rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
                           childActive
                             ? "font-semibold text-harbor-800 before:absolute before:-left-[13px] before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-harbor-500"

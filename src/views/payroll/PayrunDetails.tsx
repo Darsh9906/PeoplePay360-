@@ -13,7 +13,6 @@ import {
   Download,
   FileText,
   Loader2,
-  Mail,
   Play,
   XCircle,
 } from "lucide-react"
@@ -70,13 +69,6 @@ type PayrunDetail = {
   }
 }
 
-type SendResult = {
-  sent: number
-  failed: number
-  requested: number
-  results: { employeeName: string; sent: boolean; reason?: string }[]
-}
-
 const statusOrder: PayrunStatus[] = ["draft", "computed", "validated", "paid"]
 
 const statusLabels: Record<PayrunStatus, string> = {
@@ -97,7 +89,6 @@ const criticalCodes = new Set([
 
 export default function PayrunDetails({ id }: { id?: string }) {
   const queryClient = useQueryClient()
-  const [sendResult, setSendResult] = useState<SendResult | null>(null)
   const [actionError, setActionError] = useState("")
 
   const payrunQuery = useQuery({
@@ -118,20 +109,6 @@ export default function PayrunDetails({ id }: { id?: string }) {
       apiRequest(`/api/payruns/${id}/${action}`, { method: "POST" }),
     onSuccess: () => {
       setActionError("")
-      invalidate()
-    },
-    onError: (error: Error) => setActionError(error.message),
-  })
-
-  const sendMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<SendResult>(`/api/payruns/${id}/send-payslips`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      }),
-    onSuccess: (result) => {
-      setActionError("")
-      setSendResult(result)
       invalidate()
     },
     onError: (error: Error) => setActionError(error.message),
@@ -167,7 +144,7 @@ export default function PayrunDetails({ id }: { id?: string }) {
   }
 
   const currentIndex = statusOrder.indexOf(payrun.status)
-  const isBusy = actionMutation.isPending || sendMutation.isPending
+  const isBusy = actionMutation.isPending
 
   return (
     <div className="space-y-6">
@@ -266,21 +243,6 @@ export default function PayrunDetails({ id }: { id?: string }) {
             </Button>
           )}
 
-          {payrun.status !== "draft" && (
-            <Button
-              variant="outline"
-              onClick={() => sendMutation.mutate()}
-              disabled={isBusy || payrun.payslips.length === 0}
-            >
-              {sendMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Mail className="h-4 w-4" />
-              )}
-              Send Payslips
-            </Button>
-          )}
-
           {payrun.status === "paid" && (
             <div className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-xs font-bold text-black">
               <CheckCircle2 className="h-4 w-4" />
@@ -293,38 +255,6 @@ export default function PayrunDetails({ id }: { id?: string }) {
       {actionError && (
         <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm font-medium text-black">
           {actionError}
-        </div>
-      )}
-
-      {sendResult && (
-        <div className="rounded-lg border border-zinc-300 bg-white px-4 py-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-black">
-              Sent {sendResult.sent} of {sendResult.requested} payslip
-              {sendResult.requested === 1 ? "" : "s"}
-            </p>
-            <button
-              type="button"
-              onClick={() => setSendResult(null)}
-              className="text-xs text-zinc-500 hover:text-black"
-            >
-              Dismiss
-            </button>
-          </div>
-          {sendResult.failed > 0 && (
-            <ul className="mt-2 space-y-1">
-              {sendResult.results
-                .filter((result) => !result.sent)
-                .map((result) => (
-                  <li key={result.employeeName} className="text-xs text-zinc-600">
-                    <span className="font-medium text-black">
-                      {result.employeeName}
-                    </span>
-                    : {result.reason}
-                  </li>
-                ))}
-            </ul>
-          )}
         </div>
       )}
 
