@@ -12,7 +12,11 @@
     "db:push": "drizzle-kit push",
     "db:reset": "node --env-file=.env --experimental-strip-types scripts/reset-db.mts",
     "db:seed:payroll": "node --env-file=.env --experimental-strip-types scripts/seed-payroll-demo.mts",
-    "test:e2e": "node --env-file=.env --experimental-strip-types scripts/e2e.mts"
+    "test:e2e": "node --env-file=.env --experimental-strip-types scripts/e2e.mts",
+    "db:seed:demo": "node --env-file=.env --experimental-strip-types scripts/seed-demo.mts",
+    "db:admins": "node --env-file=.env --experimental-strip-types scripts/list-admins.mts",
+    "db:demo:users": "node --env-file=.env --experimental-strip-types scripts/seed-users.mts",
+    "db:check-login": "node --env-file=.env --experimental-strip-types scripts/check-login.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

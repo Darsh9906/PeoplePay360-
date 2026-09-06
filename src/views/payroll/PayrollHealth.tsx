@@ -441,7 +441,7 @@ export default function PayrollHealth() {
         <Dialog open={Boolean(viewingIssue)} onOpenChange={() => setViewingIssue(null)}>
           <DialogHeader>
             <DialogTitle className="text-black font-bold">
-              Payroll Health Issue Review ({viewingIssue.id})
+              Payroll Health Issue Review
             </DialogTitle>
             <DialogDescription className="text-zinc-500">
               Audit finding details and recommended corrective action.

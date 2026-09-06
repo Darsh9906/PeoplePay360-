@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Clock, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import OfficeNetworkPanel from "@/src/components/attendance/OfficeNetworkPanel"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import {
@@ -103,6 +104,8 @@ export default function MyAttendance() {
           Your check-in history for the selected period.
         </p>
       </header>
+
+      <OfficeNetworkPanel />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         {[

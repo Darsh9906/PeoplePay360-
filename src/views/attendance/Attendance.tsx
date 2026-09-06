@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { apiRequest } from "@/src/lib/api"
+import OfficeNetworkPanel from "@/src/components/attendance/OfficeNetworkPanel"
 import {
   Table,
   TableHeader,
@@ -33,12 +34,6 @@ import {
   Eye,
   Calendar,
   User,
-  CheckCircle2,
-  AlertTriangle,
-  LogIn,
-  LogOut,
-  Loader2,
-  WifiOff,
 } from "lucide-react"
 
 export interface AttendanceRecord {
@@ -69,29 +64,6 @@ type EmployeeOption = {
   id: string
   employeeCode: string
   fullName: string
-}
-
-type SelfNetworkStatus = {
-  configured: boolean
-  verified: boolean
-  currentIp: string | null
-  officeName: string
-}
-
-type SelfAttendanceRecord = {
-  id: string
-  employeeId: string
-  attendanceDate: string
-  checkIn?: string | null
-  checkOut?: string | null
-  workedHours: string | number
-  status: "present" | "late" | "absent" | "half_day"
-}
-
-type SelfAttendanceStatus = {
-  employeeLinked: boolean
-  today: SelfAttendanceRecord | null
-  network: SelfNetworkStatus
 }
 
 function calculateAttendanceHours(checkIn: string, checkOut: string, status: string): number {
@@ -148,234 +120,6 @@ function mapAttendance(record: BackendAttendanceRecord): AttendanceRecord {
 }
 
 /** Icon + title + description row used by every verification state below. */
-function StatusMessage({
-  icon,
-  title,
-  description,
-}: {
-  icon: React.ReactNode
-  title: string
-  description?: string
-}) {
-  return (
-    <div className="flex items-start gap-2.5">
-      <div className="mt-0.5 shrink-0">{icon}</div>
-      <div>
-        <p className="text-sm font-bold text-black">{title}</p>
-        {description && <p className="text-xs text-zinc-500 mt-0.5">{description}</p>}
-      </div>
-    </div>
-  )
-}
-
-/**
- * Office Network Verification panel: shows whether the current request is
- * coming from the approved office IP (checked server-side, see
- * /api/attendance/self) and gates the self Check In / Check Out actions on
- * that result. Verification always happens before an attendance record is
- * created — the buttons are only ever enabled once the server has confirmed
- * `network.verified`.
- */
-function OfficeNetworkPanel({
-  status,
-  isStatusLoading,
-  isStatusError,
-  onRetryStatus,
-  onCheckIn,
-  onCheckOut,
-  isActionPending,
-  actionError,
-  devIpOverride,
-  onDevIpOverrideChange,
-}: {
-  status: SelfAttendanceStatus | undefined
-  isStatusLoading: boolean
-  isStatusError: boolean
-  onRetryStatus: () => void
-  onCheckIn: () => void
-  onCheckOut: () => void
-  isActionPending: boolean
-  actionError: string | null
-  /** Dev-only (see below) — always undefined/no-op outside development. */
-  devIpOverride?: string
-  onDevIpOverrideChange?: (value: string) => void
-}) {
-  const body = (() => {
-    if (isStatusLoading) {
-      return (
-        <div className="flex items-center gap-2 text-sm text-zinc-600">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          <span>Verifying office network...</span>
-        </div>
-      )
-    }
-
-    if (isStatusError || !status) {
-      return (
-        <StatusMessage
-          icon={<AlertTriangle className="h-5 w-5 text-zinc-500" aria-hidden="true" />}
-          title="Unable to verify office network."
-          description="Could not reach the verification service. Check your connection and try again."
-        />
-      )
-    }
-
-    if (!status.employeeLinked) {
-      return (
-        <StatusMessage
-          icon={<AlertTriangle className="h-5 w-5 text-zinc-500" aria-hidden="true" />}
-          title="No linked employee profile"
-          description={'Your account isn’t linked to an employee record, so self check-in isn’t available. Use "Add Attendance" below instead.'}
-        />
-      )
-    }
-
-    const { network, today } = status
-
-    if (!network.configured) {
-      return (
-        <StatusMessage
-          icon={<WifiOff className="h-5 w-5 text-zinc-500" aria-hidden="true" />}
-          title="Office network verification is not configured."
-          description="An administrator needs to set the approved office IP before check-in can be verified."
-        />
-      )
-    }
-
-    const hasCheckedIn = Boolean(today?.checkIn)
-    const hasCheckedOut = Boolean(today?.checkOut)
-
-    return (
-      <div className="space-y-3">
-        {network.verified ? (
-          <StatusMessage
-            icon={<CheckCircle2 className="h-5 w-5 text-black" aria-hidden="true" />}
-            title="Office Network Verified"
-            description={`${network.officeName} · IP verification successful`}
-          />
-        ) : (
-          <StatusMessage
-            icon={<XCircle className="h-5 w-5 text-zinc-500" aria-hidden="true" />}
-            title="Office Network Not Verified"
-            description="Check-in is available only when connected to the approved office network."
-          />
-        )}
-
-        {network.currentIp && (
-          <p className="text-xs text-zinc-500 font-mono">Current IP: {network.currentIp}</p>
-        )}
-
-        {actionError && (
-          <p className="text-xs font-medium text-black bg-zinc-100 border border-zinc-300 rounded-md px-3 py-2">
-            {actionError}
-          </p>
-        )}
-
-        {hasCheckedIn && (
-          <p className="text-xs text-zinc-600">
-            Checked in at {timeFromDate(today?.checkIn)}
-            {hasCheckedOut ? ` · Checked out at ${timeFromDate(today?.checkOut)}` : ""}
-          </p>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          {!hasCheckedIn && (
-            <Button
-              type="button"
-              onClick={onCheckIn}
-              disabled={!network.verified || isActionPending}
-              aria-disabled={!network.verified || isActionPending}
-              className="bg-black hover:bg-zinc-800 text-white border border-black gap-1.5"
-            >
-              <LogIn className="h-4 w-4" aria-hidden="true" />
-              {isActionPending ? "Checking in..." : "Check In"}
-            </Button>
-          )}
-
-          {hasCheckedIn && !hasCheckedOut && (
-            <Button
-              type="button"
-              onClick={onCheckOut}
-              disabled={!network.verified || isActionPending}
-              aria-disabled={!network.verified || isActionPending}
-              className="bg-black hover:bg-zinc-800 text-white border border-black gap-1.5"
-            >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              {isActionPending ? "Checking out..." : "Check Out"}
-            </Button>
-          )}
-
-          {hasCheckedIn && hasCheckedOut && (
-            <Badge variant="active">Attendance completed for today</Badge>
-          )}
-        </div>
-      </div>
-    )
-  })()
-
-  return (
-    <div className="rounded-xl border border-zinc-300 bg-white shadow-sm p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <h2 className="text-sm font-bold text-black">Office Network Verification</h2>
-        {!isStatusLoading && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onRetryStatus}
-            className="h-7 px-2 text-xs text-zinc-500 hover:text-black"
-          >
-            Re-check
-          </Button>
-        )}
-      </div>
-      <div role="status" aria-live="polite">
-        {body}
-      </div>
-
-      {/*
-        Dev-only test aid — rendered only when this bundle was built by
-        `next dev` (process.env.NODE_ENV === "development"). `next build` /
-        `next start` statically resolve this to `false` and strip the block
-        entirely, so it does not exist in a production bundle at all. It lets
-        a developer simulate the three verification outcomes locally, since
-        `next dev` on localhost never sends x-forwarded-for/x-real-ip and
-        would otherwise always land on "unavailable".
-      */}
-      {process.env.NODE_ENV === "development" && onDevIpOverrideChange && (
-        <div className="mt-4 pt-3 border-t border-dashed border-zinc-300">
-          <label
-            htmlFor="dev-office-ip-override"
-            className="block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 mb-1.5"
-          >
-            Dev only — simulate detected IP (never active in production)
-          </label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="dev-office-ip-override"
-              value={devIpOverride ?? ""}
-              onChange={(e) => onDevIpOverrideChange(e.target.value)}
-              placeholder="e.g. 203.0.113.10 — blank = real detection (unavailable on localhost)"
-              className="h-8 text-xs border-zinc-300"
-            />
-            {devIpOverride && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onDevIpOverrideChange("")}
-                className="h-8 px-2 text-xs text-zinc-500"
-              >
-                Clear
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function Attendance() {
   const searchParams = useSearchParams()
   const employeeIdFilter = searchParams.get("employeeId")
@@ -412,7 +156,6 @@ export default function Attendance() {
     queryFn: () => apiRequest<EmployeeOption[]>("/api/employees"),
   })
 
-  const [selfActionError, setSelfActionError] = useState<string | null>(null)
 
   // Dev-only convenience state (see OfficeNetworkPanel): lets a developer
   // simulate the IP the server sees, since `next dev` on localhost never sets
@@ -420,40 +163,6 @@ export default function Attendance() {
   // when NODE_ENV === "development" — see src/app/api/_lib/network.ts. In a
   // production build this state exists but is inert: nothing ever renders the
   // input that sets it, and the header it would add is ignored server-side.
-  const [devIpOverride, setDevIpOverride] = useState("")
-  const devHeaders =
-    process.env.NODE_ENV === "development" && devIpOverride.trim()
-      ? { "Content-Type": "application/json", "x-dev-office-ip": devIpOverride.trim() }
-      : undefined
-
-  const selfStatusQuery = useQuery({
-    queryKey: ["attendance", "self", devIpOverride],
-    queryFn: () =>
-      apiRequest<SelfAttendanceStatus>(
-        "/api/attendance/self",
-        devHeaders ? { headers: devHeaders } : undefined,
-      ),
-  })
-
-  const selfActionMutation = useMutation({
-    mutationFn: (action: "check-in" | "check-out") =>
-      apiRequest<SelfAttendanceRecord>("/api/attendance/self", {
-        method: "POST",
-        body: JSON.stringify({ action }),
-        ...(devHeaders ? { headers: devHeaders } : {}),
-      }),
-    onMutate: () => setSelfActionError(null),
-    onSuccess: () => {
-      // Invalidating "attendance" also covers the ["attendance", "self"] query
-      // (TanStack Query matches by key prefix), so both the table and this
-      // panel refresh from the server's own record of what just happened.
-      queryClient.invalidateQueries({ queryKey: ["attendance"] })
-    },
-    onError: (error: unknown) => {
-      setSelfActionError(error instanceof Error ? error.message : "Something went wrong.")
-    },
-  })
-
   const records = useMemo(
     () => (attendanceQuery.data ?? []).map(mapAttendance),
     [attendanceQuery.data]
@@ -625,18 +334,7 @@ export default function Attendance() {
       </div>
 
       {/* Office Network Verification + self Check In / Check Out */}
-      <OfficeNetworkPanel
-        status={selfStatusQuery.data}
-        isStatusLoading={selfStatusQuery.isLoading}
-        isStatusError={selfStatusQuery.isError}
-        onRetryStatus={() => selfStatusQuery.refetch()}
-        onCheckIn={() => selfActionMutation.mutate("check-in")}
-        onCheckOut={() => selfActionMutation.mutate("check-out")}
-        isActionPending={selfActionMutation.isPending}
-        actionError={selfActionError}
-        devIpOverride={devIpOverride}
-        onDevIpOverrideChange={setDevIpOverride}
-      />
+      <OfficeNetworkPanel />
 
       {/* Filter Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white p-4 rounded-xl border border-zinc-300 shadow-sm">
@@ -729,9 +427,6 @@ export default function Attendance() {
                         </div>
                         <div>
                           <div>{rec.employeeName}</div>
-                          <div className="text-xs text-zinc-500 font-mono font-normal">
-                            {rec.id}
-                          </div>
                         </div>
                       </div>
                     </TableCell>
@@ -961,7 +656,7 @@ export default function Attendance() {
         <Dialog open={Boolean(viewingRecord)} onOpenChange={() => setViewingRecord(null)}>
           <DialogHeader>
             <DialogTitle className="text-black font-bold">
-              Attendance Record ({viewingRecord.id})
+              Attendance Record
             </DialogTitle>
             <DialogDescription className="text-zinc-500">
               Detailed entry for {viewingRecord.employeeName}

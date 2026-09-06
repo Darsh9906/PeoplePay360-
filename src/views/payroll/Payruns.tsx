@@ -165,9 +165,6 @@ export default function Payruns() {
                     <TableCell className="font-semibold text-black">
                       <div>
                         {pr.name}
-                        <div className="text-xs text-zinc-500 font-mono font-normal">
-                          {pr.id}
-                        </div>
                       </div>
                     </TableCell>
 

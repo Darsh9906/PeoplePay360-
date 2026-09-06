@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useId, useState } from "react"
 
 export type TrendPoint = {
   label: string
@@ -9,14 +9,34 @@ export type TrendPoint = {
 }
 
 const width = 720
-const height = 220
-const padding = { top: 16, right: 56, bottom: 28, left: 56 }
+const height = 240
+const padding = { top: 18, right: 58, bottom: 30, left: 58 }
 
 /** Rounds an axis maximum up to a clean tick value. */
 function niceMax(value: number) {
   if (value <= 0) return 1
   const magnitude = 10 ** Math.floor(Math.log10(value))
   return Math.ceil(value / magnitude) * magnitude
+}
+
+/** Catmull-Rom → cubic Bézier, so the line eases without overshooting. */
+function smoothPath(points: { x: number; y: number }[]) {
+  if (points.length < 2) {
+    return points.length === 1 ? `M ${points[0].x} ${points[0].y}` : ""
+  }
+
+  let d = `M ${points[0].x} ${points[0].y}`
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[i - 1] ?? points[i]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[i + 2] ?? p2
+
+    d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6}, ${
+      p2.x - (p3.x - p1.x) / 6
+    } ${p2.y - (p3.y - p1.y) / 6}, ${p2.x} ${p2.y}`
+  }
+  return d
 }
 
 /**
@@ -35,10 +55,12 @@ export default function TrendChart({
   emptyMessage?: string
 }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const gradientId = useId()
 
   if (data.length === 0) {
     return (
-      <div className="flex h-48 items-center justify-center text-xs text-zinc-500">
+      <div className="flex h-52 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-200 text-xs text-zinc-400">
+        <span className="h-1.5 w-10 rounded-full bg-zinc-200" />
         {emptyMessage}
       </div>
     )
@@ -53,18 +75,15 @@ export default function TrendChart({
       ? padding.left + plotWidth / 2
       : padding.left + (index / (data.length - 1)) * plotWidth
 
-  const y = (value: number) =>
-    padding.top + plotHeight - (value / max) * plotHeight
+  const y = (value: number) => padding.top + plotHeight - (value / max) * plotHeight
 
-  const linePath = data
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(point.value)}`)
-    .join(" ")
-
+  const points = data.map((point, index) => ({ x: x(index), y: y(point.value) }))
+  const linePath = smoothPath(points)
   const areaPath =
-    data.length > 1
-      ? `${linePath} L ${x(data.length - 1)} ${padding.top + plotHeight} L ${x(0)} ${
-          padding.top + plotHeight
-        } Z`
+    points.length > 1
+      ? `${linePath} L ${points[points.length - 1].x} ${padding.top + plotHeight} L ${
+          points[0].x
+        } ${padding.top + plotHeight} Z`
       : ""
 
   const ticks = [0, 0.5, 1].map((fraction) => fraction * max)
@@ -75,11 +94,18 @@ export default function TrendChart({
     <div className="relative">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full"
+        className="w-full overflow-visible"
         role="img"
         aria-label="Net salary by payroll month"
         onMouseLeave={() => setActiveIndex(null)}
       >
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-1)" stopOpacity="0.24" />
+            <stop offset="100%" stopColor="var(--chart-1)" stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+
         {/* Recessive gridlines */}
         {ticks.map((tick) => (
           <g key={tick}>
@@ -88,26 +114,27 @@ export default function TrendChart({
               x2={width - padding.right}
               y1={y(tick)}
               y2={y(tick)}
-              stroke="#e4e4e7"
+              stroke="var(--border)"
               strokeWidth={1}
+              strokeDasharray={tick === 0 ? undefined : "3 5"}
             />
             <text
-              x={padding.left - 8}
-              y={y(tick) + 3}
+              x={padding.left - 10}
+              y={y(tick) + 3.5}
               textAnchor="end"
-              className="fill-zinc-500 text-[10px] tabular-nums"
+              className="fill-zinc-400 text-[10px] tabular-nums"
             >
               {formatTick(tick)}
             </text>
           </g>
         ))}
 
-        {areaPath && <path d={areaPath} fill="#18181b" fillOpacity={0.1} />}
+        {areaPath && <path d={areaPath} fill={`url(#${gradientId})`} />}
 
         <path
           d={linePath}
           fill="none"
-          stroke="#18181b"
+          stroke="var(--chart-1)"
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -118,15 +145,17 @@ export default function TrendChart({
           const isLast = index === lastIndex
 
           return (
-            <g key={point.label}>
+            <g key={`${point.label}-${index}`}>
               {isActive && (
                 <line
                   x1={x(index)}
                   x2={x(index)}
                   y1={padding.top}
                   y2={padding.top + plotHeight}
-                  stroke="#a1a1aa"
+                  stroke="var(--chart-1)"
+                  strokeOpacity={0.35}
                   strokeWidth={1}
+                  strokeDasharray="3 4"
                 />
               )}
 
@@ -135,10 +164,10 @@ export default function TrendChart({
                 <circle
                   cx={x(index)}
                   cy={y(point.value)}
-                  r={4}
-                  fill="#18181b"
-                  stroke="#ffffff"
-                  strokeWidth={2}
+                  r={isActive ? 5.5 : 4.5}
+                  fill="var(--chart-1)"
+                  stroke="var(--card)"
+                  strokeWidth={2.5}
                 />
               )}
 
@@ -146,7 +175,11 @@ export default function TrendChart({
                 x={x(index)}
                 y={height - 8}
                 textAnchor="middle"
-                className="fill-zinc-500 text-[10px]"
+                className={
+                  isActive
+                    ? "fill-harbor-800 text-[10px] font-semibold"
+                    : "fill-zinc-400 text-[10px]"
+                }
               >
                 {point.label}
               </text>
@@ -167,18 +200,27 @@ export default function TrendChart({
         {/* Direct label on the endpoint only. */}
         <text
           x={x(lastIndex) + 10}
-          y={y(data[lastIndex].value) + 3}
-          className="fill-zinc-900 text-[11px] font-semibold tabular-nums"
+          y={y(data[lastIndex].value) + 3.5}
+          className="fill-harbor-800 text-[11px] font-semibold tabular-nums"
         >
           {formatTick(data[lastIndex].value)}
         </text>
       </svg>
 
+      {/* Tooltip rides the crosshair, pinned inside the plot so it never
+          escapes the card. */}
       {active && (
-        <div className="mt-1 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-[11px] text-zinc-600">
-          <span className="font-semibold text-black">{active.label}</span> ·{" "}
-          {formatValue(active.value)}
-          {active.meta && <> · {active.meta}</>}
+        <div
+          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] shadow-lift"
+          style={{
+            left: `clamp(4.5rem, ${(x(activeIndex!) / width) * 100}%, calc(100% - 4.5rem))`,
+          }}
+        >
+          <p className="font-semibold text-zinc-900">{active.label}</p>
+          <p className="mt-0.5 font-mono tabular-nums text-harbor-700">
+            {formatValue(active.value)}
+          </p>
+          {active.meta && <p className="mt-0.5 text-zinc-500">{active.meta}</p>}
         </div>
       )}
     </div>

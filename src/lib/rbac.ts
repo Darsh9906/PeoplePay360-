@@ -24,6 +24,8 @@ export type NavItem = {
   href: string
   /** Lucide icon name, resolved to a component in the sidebar. */
   icon: string
+  /** Sidebar group heading. Consecutive items sharing one sit under it. */
+  section?: string
   roles: readonly UserRole[]
   children?: NavItem[]
 }
@@ -36,23 +38,24 @@ export type NavItem = {
  */
 export const navigation: NavItem[] = [
   // ---- Employee self-service ----
-  { label: "My Profile", href: "/me", icon: "UserRound", roles: ["employee"] },
-  { label: "My Attendance", href: "/me/attendance", icon: "Clock", roles: ["employee"] },
-  { label: "My Time Off", href: "/me/timeoff", icon: "CalendarDays", roles: ["employee"] },
+  { label: "My Profile", href: "/me", icon: "UserRound", section: "My workspace", roles: ["employee"] },
+  { label: "My Attendance", href: "/me/attendance", icon: "Clock", section: "My workspace", roles: ["employee"] },
+  { label: "My Time Off", href: "/me/timeoff", icon: "CalendarDays", section: "My workspace", roles: ["employee"] },
 
   // ---- HR ----
-  { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", roles: HR },
-  { label: "Employees", href: "/employees", icon: "Users", roles: HR },
-  { label: "Contracts", href: "/contracts", icon: "FileText", roles: HR },
-  { label: "Working Schedules", href: "/schedules", icon: "CalendarClock", roles: HR },
-  { label: "Attendance", href: "/attendance", icon: "Clock", roles: HR },
-  { label: "Time Off", href: "/timeoff", icon: "CalendarDays", roles: HR },
+  { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", section: "Main menu", roles: HR },
+  { label: "Employees", href: "/employees", icon: "Users", section: "Management", roles: HR },
+  { label: "Contracts", href: "/contracts", icon: "FileText", section: "Management", roles: HR },
+  { label: "Working Schedules", href: "/schedules", icon: "CalendarClock", section: "Management", roles: HR },
+  { label: "Attendance", href: "/attendance", icon: "Clock", section: "Management", roles: HR },
+  { label: "Time Off", href: "/timeoff", icon: "CalendarDays", section: "Management", roles: HR },
 
   // ---- Payroll ----
   {
     label: "Payroll",
     href: "/payroll",
     icon: "Wallet",
+    section: "Payroll",
     roles: PAYROLL,
     children: [
       { label: "Payroll Dashboard", href: "/payroll", icon: "PieChart", roles: PAYROLL },
@@ -67,8 +70,8 @@ export const navigation: NavItem[] = [
   },
 
   // ---- Administration ----
-  { label: "Users & Roles", href: "/users", icon: "ShieldCheck", roles: ADMIN },
-  { label: "Settings", href: "/settings", icon: "Settings", roles: ADMIN },
+  { label: "Users & Roles", href: "/users", icon: "ShieldCheck", section: "Administration", roles: ADMIN },
+  { label: "Settings", href: "/settings", icon: "Settings", section: "Administration", roles: ADMIN },
 ]
 
 /** Reachable without a session. */
@@ -136,4 +139,16 @@ export function defaultPathForRole(role?: string | null) {
 
 export function labelForRole(role?: string | null) {
   return isUserRole(role) ? roleLabels[role] : "User"
+}
+
+/** Human title for the current route — longest matching href wins. */
+export function labelForPath(pathname: string) {
+  const match = navigation
+    .flatMap((item) => [item, ...(item.children ?? [])])
+    .filter(
+      (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0]
+
+  return match?.label ?? "Workspace"
 }

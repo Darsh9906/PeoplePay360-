@@ -241,9 +241,6 @@ export default function Contracts() {
                           <div className="font-semibold text-black">
                             {contract.employeeName}
                           </div>
-                          <div className="text-xs text-zinc-500 font-mono">
-                            {contract.id}
-                          </div>
                         </div>
                       </div>
                     </TableCell>

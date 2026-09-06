@@ -5,18 +5,18 @@ import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import {
   AlertTriangle,
+  ArrowUpRight,
   BadgeCheck,
   CalendarDays,
   Clock,
   FileText,
-  Loader2,
-  Users,
   Wallet,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -27,8 +27,10 @@ import {
 } from "@/components/ui/table"
 import BarChart from "@/src/components/charts/BarChart"
 import TrendChart from "@/src/components/charts/TrendChart"
-import { compactINR, formatINR, monthLabel } from "@/src/lib/format"
+import StatCard from "@/src/components/dashboard/StatCard"
+import { compactINR, formatINR, formatStatus, monthLabel } from "@/src/lib/format"
 import { apiRequest } from "@/src/lib/api"
+import { useAuth } from "@/src/context/AuthContext"
 
 type DashboardData = {
   payroll: {
@@ -38,6 +40,7 @@ type DashboardData = {
     payslipCount: number
     averageNetPay: string
   }
+  payslipStatus: { status: string; count: number }[]
   headcount: { totalEmployees: number; activeEmployees: number }
   attendance: {
     presentDays: number
@@ -93,11 +96,55 @@ type DashboardData = {
 
 type Department = { id: string; name: string }
 
+/** Payslip lifecycle, in order. Colours come from the sequential blue ramp, so
+ *  the bar reads as progress rather than as four unrelated categories. */
+const statusOrder = [
+  { key: "paid", label: "Paid", swatch: "var(--seq-700)" },
+  { key: "validated", label: "Validated", swatch: "var(--seq-500)" },
+  { key: "computed", label: "Computed", swatch: "var(--seq-400)" },
+  { key: "draft", label: "Draft", swatch: "var(--seq-300)" },
+]
+
+/** Panel chrome, so every card on the page opens the same way. */
+function PanelHeader({
+  title,
+  source,
+  aside,
+}: {
+  title: string
+  source: string
+  aside?: React.ReactNode
+}) {
+  return (
+    <CardHeader className="flex-row items-start justify-between gap-4 border-b border-zinc-100 p-5">
+      <div>
+        <h2 className="font-display text-[15px] font-semibold tracking-[-0.015em] text-zinc-900">
+          {title}
+        </h2>
+        <p className="mt-1 text-xs text-zinc-500">Source: {source}</p>
+      </div>
+      {aside}
+    </CardHeader>
+  )
+}
+
 export default function PayrollDashboard() {
-  const [from, setFrom] = useState("")
-  const [to, setTo] = useState("")
+  const { user } = useAuth()
+  // One month, rather than a pair of dates. The API still takes a range, so the
+  // selection is expanded to the first and last day of that month.
+  const [period, setPeriod] = useState("")
   const [departmentId, setDepartmentId] = useState("")
   const [employeeType, setEmployeeType] = useState("all")
+
+  const { from, to } = useMemo(() => {
+    if (!period) {
+      return { from: "", to: "" }
+    }
+    const [year, month] = period.split("-").map(Number)
+    // Day 0 of the next month is the last day of this one.
+    const lastDay = new Date(year, month, 0).getDate()
+    return { from: `${period}-01`, to: `${period}-${String(lastDay).padStart(2, "0")}` }
+  }, [period])
 
   const departmentsQuery = useQuery({
     queryKey: ["departments"],
@@ -118,7 +165,8 @@ export default function PayrollDashboard() {
   })
 
   const data = dashboardQuery.data
-  const hasFilters = Boolean(from || to || departmentId || employeeType !== "all")
+  const isLoading = dashboardQuery.isLoading
+  const hasFilters = Boolean(period || departmentId || employeeType !== "all")
 
   const departmentBars = useMemo(
     () =>
@@ -142,451 +190,574 @@ export default function PayrollDashboard() {
     [data?.monthlyTrend],
   )
 
-  if (dashboardQuery.isLoading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-24 text-sm text-zinc-500">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading payroll dashboard...
-      </div>
+  const statusSplit = useMemo(() => {
+    const counts = new Map(
+      (data?.payslipStatus ?? []).map((row) => [row.status, row.count]),
     )
-  }
-
-  if (!data) {
-    return (
-      <div className="rounded-xl border border-zinc-300 bg-white p-10 text-center">
-        <p className="text-sm font-semibold text-black">
-          Could not load the dashboard
-        </p>
-        <p className="mt-1 text-xs text-zinc-500">
-          Check the API connection and try again.
-        </p>
-      </div>
-    )
-  }
+    const total = [...counts.values()].reduce((sum, count) => sum + count, 0)
+    return {
+      total,
+      rows: statusOrder.map((status) => ({
+        ...status,
+        count: counts.get(status.key) ?? 0,
+        share: total > 0 ? ((counts.get(status.key) ?? 0) / total) * 100 : 0,
+      })),
+    }
+  }, [data?.payslipStatus])
 
   const kpis = [
     {
-      label: "Total net salary",
-      value: formatINR(Number(data.payroll.totalNetPay)),
-      hint: `Gross ${formatINR(Number(data.payroll.totalGrossPay))}`,
+      label: "Total net salary paid",
+      value: compactINR(Number(data?.payroll.totalNetPay ?? 0)),
+      detail: `Gross ${compactINR(Number(data?.payroll.totalGrossPay ?? 0))}`,
       icon: Wallet,
     },
     {
       label: "Payslips generated",
-      value: String(data.payroll.payslipCount),
-      hint: `${data.headcount.activeEmployees} active employees`,
+      value: data?.payroll.payslipCount ?? 0,
+      detail: `${statusSplit.rows[0]?.count ?? 0} paid · ${
+        (statusSplit.rows[2]?.count ?? 0) + (statusSplit.rows[3]?.count ?? 0)
+      } pending`,
       icon: FileText,
     },
     {
-      label: "Average net salary",
-      value: formatINR(Number(data.payroll.averageNetPay)),
-      hint: `Deductions ${formatINR(Number(data.payroll.totalDeductions))}`,
+      label: "Avg salary / employee",
+      value: formatINR(Number(data?.payroll.averageNetPay ?? 0)),
+      detail: `Deductions ${compactINR(Number(data?.payroll.totalDeductions ?? 0))}`,
       icon: BadgeCheck,
     },
     {
       label: "Approved time off",
-      value: `${Number(data.timeOff.approvedDays).toFixed(0)} days`,
-      hint: `${data.timeOff.pending} request(s) pending`,
+      value: `${Number(data?.timeOff.approvedDays ?? 0).toFixed(0)} days`,
+      detail: `${data?.timeOff.pending ?? 0} request(s) pending`,
       icon: CalendarDays,
+      tone: (data?.timeOff.pending ?? 0) > 0 ? ("warning" as const) : undefined,
     },
     {
       label: "Attendance health",
-      value: `${data.attendance.attendanceHealth}%`,
-      hint: `${data.attendance.totalRecords} records reviewed`,
+      value: `${data?.attendance.attendanceHealth ?? 0}%`,
+      detail: `${data?.attendance.totalRecords ?? 0} records reviewed`,
       icon: Clock,
+      tone:
+        (data?.attendance.attendanceHealth ?? 0) >= 90
+          ? ("success" as const)
+          : ("warning" as const),
     },
   ]
 
   const alertItems = [
     {
-      label: "Missing bank details",
-      count: data.alerts.missingBankDetails,
+      label: "employees missing bank details",
+      count: data?.alerts.missingBankDetails ?? 0,
       href: "/payroll/anomalies",
     },
     {
-      label: "Active staff without a contract",
-      count: data.alerts.employeesWithoutContract,
+      label: "active staff without a contract",
+      count: data?.alerts.employeesWithoutContract ?? 0,
       href: "/contracts",
     },
     {
-      label: "Contracts expiring in 60 days",
-      count: data.alerts.expiringContracts,
+      label: "contracts expiring in 60 days",
+      count: data?.alerts.expiringContracts ?? 0,
       href: "/contracts",
     },
     {
-      label: "Payroll warnings raised",
-      count: data.warnings.total,
+      label: "payroll warnings raised",
+      count: data?.warnings.total ?? 0,
       href: "/payroll/anomalies",
     },
   ]
 
+  const attendanceBars = [
+    { label: "Present", value: data?.attendance.presentDays ?? 0 },
+    { label: "Late", value: data?.attendance.lateDays ?? 0 },
+    { label: "Absent", value: data?.attendance.absentDays ?? 0 },
+    { label: "Half day", value: data?.attendance.halfDays ?? 0 },
+  ]
+
+  // Only surface the error when there is no data behind it; a failed background
+  // refetch should not throw a banner over figures that are already on screen.
+  const loadError =
+    dashboardQuery.error && !data
+      ? "Could not load the payroll dashboard. Check the API connection and try again."
+      : ""
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 border-b border-zinc-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-black">
-            Payroll Dashboard
-          </h1>
-          <p className="mt-0.5 text-sm text-zinc-500">
-            Live figures across employees, contracts, attendance, time off, and
-            payroll.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/payroll/payruns">
-            <Button variant="outline" className="text-xs">
-              Payruns
-            </Button>
-          </Link>
-          <Link href="/payroll/payslips">
-            <Button variant="outline" className="text-xs">
-              Payslips
-            </Button>
-          </Link>
-        </div>
-      </div>
+      {/* ---------- Header ---------- */}
+      <header>
+        <h1 className="font-display text-[1.75rem] font-semibold tracking-[-0.025em] text-zinc-900">
+          Payroll Dashboard
+        </h1>
+        <p className="mt-1.5 max-w-3xl text-sm text-zinc-500">
+          Payments, staffing impact, leave patterns and attendance quality for the
+          selected period.
+        </p>
+      </header>
 
-      {/* Filters — one row above the charts */}
-      <div className="flex flex-col gap-3 rounded-xl border border-zinc-300 bg-white p-4 shadow-sm md:flex-row md:items-end">
-        <div className="flex-1">
-          <label className="mb-1 block text-[11px] font-semibold text-zinc-600">
-            Period from
+      {/* ---------- Filters ---------- */}
+      <Card>
+        <CardContent className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="space-y-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+              Period
+            </span>
+            <Input
+              type="month"
+              value={period}
+              onChange={(event) => setPeriod(event.target.value)}
+            />
           </label>
-          <Input
-            type="date"
-            value={from}
-            onChange={(event) => setFrom(event.target.value)}
-          />
-        </div>
-        <div className="flex-1">
-          <label className="mb-1 block text-[11px] font-semibold text-zinc-600">
-            Period to
-          </label>
-          <Input
-            type="date"
-            value={to}
-            onChange={(event) => setTo(event.target.value)}
-          />
-        </div>
-        <div className="flex-1">
-          <label className="mb-1 block text-[11px] font-semibold text-zinc-600">
-            Department
-          </label>
-          <Select
-            value={departmentId}
-            onChange={(event) => setDepartmentId(event.target.value)}
-          >
-            <option value="">All departments</option>
-            {(departmentsQuery.data ?? []).map((department) => (
-              <option key={department.id} value={department.id}>
-                {department.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="flex-1">
-          <label className="mb-1 block text-[11px] font-semibold text-zinc-600">
-            Employee type
-          </label>
-          <Select
-            value={employeeType}
-            onChange={(event) => setEmployeeType(event.target.value)}
-          >
-            <option value="all">All employees</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="terminated">Terminated</option>
-          </Select>
-        </div>
-        {hasFilters && (
-          <Button
-            variant="ghost"
-            className="text-xs"
-            onClick={() => {
-              setFrom("")
-              setTo("")
-              setDepartmentId("")
-              setEmployeeType("all")
-            }}
-          >
-            Reset
-          </Button>
-        )}
-      </div>
-
-      {/* KPI row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {kpis.map((kpi) => (
-          <div
-            key={kpi.label}
-            className="rounded-xl border border-zinc-300 bg-white p-4 shadow-sm"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-500">
-                {kpi.label}
-              </span>
-              <kpi.icon className="h-4 w-4 text-zinc-400" />
-            </div>
-            <div className="mt-1.5 text-xl font-bold tabular-nums text-black">
-              {kpi.value}
-            </div>
-            <div className="mt-0.5 text-[11px] text-zinc-500">{kpi.hint}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Charts */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-zinc-300 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-bold text-black">
-            Salary cost by department
-          </h2>
-          <p className="mb-4 text-[11px] text-zinc-500">
-            Net salary paid in the selected period
-          </p>
-          <BarChart data={departmentBars} formatValue={compactINR} />
-        </div>
-
-        <div className="rounded-xl border border-zinc-300 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-bold text-black">
-            Monthly net salary trend
-          </h2>
-          <p className="mb-2 text-[11px] text-zinc-500">
-            Net payroll by period, from computed payslips
-          </p>
-          <TrendChart
-            data={trendPoints}
-            formatValue={(value) => formatINR(value)}
-            formatTick={compactINR}
-          />
-        </div>
-      </div>
-
-      {/* Operational alerts */}
-      <div className="rounded-xl border border-zinc-300 bg-white shadow-sm">
-        <div className="flex items-center gap-2 border-b border-zinc-200 p-4">
-          <AlertTriangle className="h-4 w-4 text-black" />
-          <h2 className="text-sm font-bold text-black">Operational alerts</h2>
-        </div>
-        <div className="grid grid-cols-2 divide-x divide-y divide-zinc-100 lg:grid-cols-4 lg:divide-y-0">
-          {alertItems.map((alert) => (
-            <Link
-              key={alert.label}
-              href={alert.href}
-              className="p-4 transition hover:bg-zinc-50"
+          <label className="space-y-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+              Department
+            </span>
+            <Select
+              value={departmentId}
+              onChange={(event) => setDepartmentId(event.target.value)}
             >
-              <div className="text-2xl font-bold tabular-nums text-black">
-                {alert.count}
-              </div>
-              <div className="mt-0.5 text-[11px] text-zinc-500">
-                {alert.label}
-              </div>
-            </Link>
-          ))}
-        </div>
-        {data.warnings.byCode.length > 0 && (
-          <div className="flex flex-wrap gap-2 border-t border-zinc-200 p-4">
-            {data.warnings.byCode.map((warning) => (
-              <Badge key={warning.code} variant="outline">
-                {warning.code.replaceAll("_", " ")} · {warning.count}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Attendance + time off overviews */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-zinc-300 bg-white p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-bold text-black">
-            Attendance overview
-          </h2>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Present", value: data.attendance.presentDays },
-              { label: "Late", value: data.attendance.lateDays },
-              { label: "Absent", value: data.attendance.absentDays },
-              { label: "Half day", value: data.attendance.halfDays },
-              {
-                label: "Missing check-out",
-                value: data.attendance.missingCheckouts,
-              },
-              {
-                label: "Overtime hrs",
-                value: Number(data.attendance.overtimeHours).toFixed(0),
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-lg border border-zinc-200 bg-zinc-50 p-3"
-              >
-                <div className="text-lg font-bold tabular-nums text-black">
-                  {item.value}
-                </div>
-                <div className="text-[11px] text-zinc-500">{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-zinc-300 bg-white p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-bold text-black">Time off overview</h2>
-          <div className="mb-3 grid grid-cols-3 gap-3">
-            {[
-              { label: "Approved", value: data.timeOff.approved },
-              { label: "Pending", value: data.timeOff.pending },
-              { label: "Refused", value: data.timeOff.refused },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-lg border border-zinc-200 bg-zinc-50 p-3"
-              >
-                <div className="text-lg font-bold tabular-nums text-black">
-                  {item.value}
-                </div>
-                <div className="text-[11px] text-zinc-500">{item.label}</div>
-              </div>
-            ))}
-          </div>
-          {data.leaveBalances.length > 0 ? (
-            <div className="space-y-1.5">
-              {data.leaveBalances.map((balance) => (
-                <div
-                  key={balance.typeName}
-                  className="flex items-center justify-between text-xs"
-                >
-                  <span className="text-zinc-600">{balance.typeName}</span>
-                  <span className="tabular-nums text-zinc-900">
-                    <span className="font-semibold">
-                      {Number(balance.remaining).toFixed(0)}
-                    </span>
-                    <span className="text-zinc-400">
-                      {" "}
-                      / {Number(balance.allocated).toFixed(0)} days left
-                    </span>
-                  </span>
-                </div>
+              <option value="">All departments</option>
+              {(departmentsQuery.data ?? []).map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
               ))}
+            </Select>
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+              Employee type
+            </span>
+            <Select
+              value={employeeType}
+              onChange={(event) => setEmployeeType(event.target.value)}
+            >
+              <option value="all">All types</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="terminated">Terminated</option>
+            </Select>
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+              Company
+            </span>
+            {/* Every figure is already scoped to the signed-in workspace, so
+                this reports the scope rather than offering a choice. */}
+            <Input
+              readOnly
+              tabIndex={-1}
+              aria-readonly
+              value={user?.organization?.name ?? "Your workspace"}
+              className="cursor-default bg-zinc-50 text-zinc-600 focus-visible:ring-0"
+            />
+          </label>
+
+          {hasFilters && (
+            <div className="sm:col-span-2 xl:col-span-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setPeriod("")
+                  setDepartmentId("")
+                  setEmployeeType("all")
+                }}
+                className="text-xs font-semibold text-harbor-700 hover:text-harbor-900 hover:underline"
+              >
+                Clear all filters
+              </button>
             </div>
-          ) : (
-            <p className="text-xs text-zinc-500">
-              No approved leave allocations yet.
-            </p>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Department breakdown — also the table view for the bar chart */}
-      <div className="overflow-hidden rounded-xl border border-zinc-300 bg-white shadow-sm">
-        <div className="flex items-center gap-2 border-b border-zinc-200 p-4">
-          <Users className="h-4 w-4 text-black" />
-          <h2 className="text-sm font-bold text-black">Department breakdown</h2>
+      {loadError && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-danger/20 bg-danger-soft px-4 py-3 text-sm font-medium text-danger">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {loadError}
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-zinc-200 bg-zinc-50">
-              <TableHead className="font-semibold text-black">
-                Department
-              </TableHead>
-              <TableHead className="font-semibold text-black">Headcount</TableHead>
-              <TableHead className="font-semibold text-black">Gross</TableHead>
-              <TableHead className="text-right font-semibold text-black">
-                Net salary
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.departmentCosts.map((row) => (
-              <TableRow key={row.departmentId} className="border-zinc-200">
-                <TableCell className="font-semibold text-black">
-                  {row.department}
-                </TableCell>
-                <TableCell className="text-xs text-zinc-700">
-                  {row.headcount}
-                </TableCell>
-                <TableCell className="text-xs text-zinc-700">
-                  {formatINR(Number(row.grossPay))}
-                </TableCell>
-                <TableCell className="text-right text-xs font-bold text-black">
-                  {formatINR(Number(row.netPay))}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      )}
 
-      {/* Recent payruns */}
-      <div className="overflow-hidden rounded-xl border border-zinc-300 bg-white shadow-sm">
-        <div className="border-b border-zinc-200 p-4">
-          <h2 className="text-sm font-bold text-black">Recent payruns</h2>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-zinc-200 bg-zinc-50">
-              <TableHead className="font-semibold text-black">Payrun</TableHead>
-              <TableHead className="font-semibold text-black">Period</TableHead>
-              <TableHead className="font-semibold text-black">Payslips</TableHead>
-              <TableHead className="font-semibold text-black">Net total</TableHead>
-              <TableHead className="text-right font-semibold text-black">
-                Status
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.recentPayruns.length > 0 ? (
-              data.recentPayruns.map((payrun) => (
-                <TableRow
-                  key={payrun.id}
-                  className="border-zinc-200 hover:bg-zinc-50"
-                >
-                  <TableCell className="font-semibold text-black">
+      {/* ---------- Headline figures ---------- */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {kpis.map((kpi) => (
+          <StatCard key={kpi.label} {...kpi} loading={isLoading} />
+        ))}
+      </section>
+
+      {/* ---------- Cost, trend, status ---------- */}
+      <section className="grid gap-5 xl:grid-cols-[1fr_1.35fr_1.05fr]">
+        <Card>
+          <PanelHeader
+            title="Salary cost by department"
+            source="Payslips + employee department"
+          />
+          <CardContent className="p-5">
+            {isLoading ? (
+              <div className="space-y-3.5 py-1" aria-hidden>
+                {[92, 74, 58, 44, 30].map((width, index) => (
+                  <div
+                    key={index}
+                    className="grid grid-cols-[110px_1fr] items-center gap-3"
+                  >
+                    <Skeleton className="h-3 w-20 rounded" />
+                    <Skeleton
+                      className="h-2.5 rounded-full"
+                      style={{ width: `${width}%` }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <BarChart
+                data={departmentBars}
+                formatValue={compactINR}
+                emptyMessage="No department payroll data yet"
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <PanelHeader
+            title="Monthly net salary trend"
+            source="Historical payslips / payruns"
+          />
+          <CardContent className="p-5">
+            {isLoading ? (
+              <div className="flex h-[240px] items-end gap-2" aria-hidden>
+                {[38, 52, 46, 64, 58, 78, 70, 88].map((height, index) => (
+                  <Skeleton
+                    key={index}
+                    className="flex-1 rounded-md"
+                    style={{ height: `${height}%` }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <TrendChart
+                data={trendPoints}
+                formatValue={formatINR}
+                formatTick={compactINR}
+                emptyMessage="No computed payruns yet"
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <PanelHeader
+            title="Payslip status & alerts"
+            source="Payrun + payslip validation"
+          />
+          <CardContent className="space-y-5 p-5">
+            {/* Status split — one stacked bar, with a legend carrying the counts. */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+                Status split
+              </p>
+              {isLoading ? (
+                <Skeleton className="mt-3 h-3 w-full rounded-full" />
+              ) : statusSplit.total > 0 ? (
+                <>
+                  <div className="mt-3 flex h-3 gap-0.5 overflow-hidden rounded-full">
+                    {statusSplit.rows
+                      .filter((row) => row.count > 0)
+                      .map((row) => (
+                        <span
+                          key={row.key}
+                          title={`${row.label}: ${row.count}`}
+                          style={{
+                            width: `${row.share}%`,
+                            backgroundColor: row.swatch,
+                          }}
+                        />
+                      ))}
+                  </div>
+                  <dl className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-2">
+                    {statusSplit.rows.map((row) => (
+                      <div key={row.key} className="flex items-center gap-2 text-xs">
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                          style={{ backgroundColor: row.swatch }}
+                        />
+                        <dt className="text-zinc-500">{row.label}</dt>
+                        <dd className="ml-auto font-mono font-semibold tabular-nums text-zinc-900">
+                          {row.count}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
+              ) : (
+                <p className="mt-3 text-xs text-zinc-400">No payslips in scope.</p>
+              )}
+            </div>
+
+            <div className="border-t border-zinc-100 pt-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+                Current alerts
+              </p>
+              <ul className="mt-3 space-y-2">
+                {alertItems.map((item) => (
+                  <li key={item.label}>
                     <Link
-                      href={`/payroll/payruns/${payrun.id}`}
-                      className="hover:underline"
+                      href={item.href}
+                      className="flex items-start gap-2.5 rounded-lg px-2 py-1.5 text-[13px] transition-colors hover:bg-harbor-50/70"
                     >
-                      {payrun.name}
+                      <span
+                        className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                          item.count > 0 ? "bg-danger" : "bg-success"
+                        }`}
+                      />
+                      <span className="text-zinc-600">
+                        {isLoading ? (
+                          <Skeleton className="inline-block h-3 w-6 rounded align-middle" />
+                        ) : (
+                          <strong className="font-mono font-semibold tabular-nums text-zinc-900">
+                            {item.count}
+                          </strong>
+                        )}{" "}
+                        {item.label}
+                      </span>
+                      <ArrowUpRight className="ml-auto mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-300" />
                     </Link>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-zinc-700">
-                    {payrun.periodStart} → {payrun.periodEnd}
-                  </TableCell>
-                  <TableCell className="text-xs text-zinc-700">
-                    {payrun.payslipCount}
-                  </TableCell>
-                  <TableCell className="text-xs font-semibold text-black">
-                    {formatINR(Number(payrun.totalNet))}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge
-                      variant={
-                        payrun.status === "paid"
-                          ? "active"
-                          : payrun.status === "validated"
-                            ? "running"
-                            : payrun.status === "computed"
-                              ? "expiring"
-                              : "draft"
-                      }
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ---------- Attendance, time off, departments ---------- */}
+      <section className="grid gap-5 xl:grid-cols-3">
+        <Card>
+          <PanelHeader title="Attendance overview" source="Attendance records" />
+          <CardContent className="p-5">
+            {isLoading ? (
+              <div className="space-y-3" aria-hidden>
+                {[0, 1, 2, 3].map((row) => (
+                  <Skeleton key={row} className="h-3 w-full rounded" />
+                ))}
+              </div>
+            ) : (
+              <>
+                <BarChart
+                  data={attendanceBars}
+                  formatValue={(value) => String(value)}
+                  emptyMessage="No attendance records in scope"
+                />
+                <dl className="mt-5 space-y-2 border-t border-zinc-100 pt-4 text-xs">
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Missing check-outs</dt>
+                    <dd className="font-mono font-semibold tabular-nums text-zinc-900">
+                      {data?.attendance.missingCheckouts ?? 0}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Overtime hours</dt>
+                    <dd className="font-mono font-semibold tabular-nums text-zinc-900">
+                      {Number(data?.attendance.overtimeHours ?? 0).toFixed(1)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Attendance coverage</dt>
+                    <dd className="font-mono font-semibold tabular-nums text-zinc-900">
+                      {data?.attendance.attendanceHealth ?? 0}%
+                    </dd>
+                  </div>
+                </dl>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <PanelHeader
+            title="Time off overview"
+            source="Time off requests + allocations"
+          />
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Allocated</TableHead>
+                  <TableHead className="text-right">Taken</TableHead>
+                  <TableHead className="text-right">Remaining</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  [0, 1, 2].map((row) => (
+                    <TableRow key={row}>
+                      <TableCell colSpan={4}>
+                        <Skeleton className="h-3 w-full rounded" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (data?.leaveBalances ?? []).length > 0 ? (
+                  data!.leaveBalances.map((row) => (
+                    <TableRow key={row.typeName}>
+                      <TableCell className="font-medium text-zinc-900">
+                        {row.typeName}
+                      </TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">
+                        {Number(row.allocated).toFixed(0)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">
+                        {Number(row.taken).toFixed(0)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-semibold tabular-nums text-zinc-900">
+                        {Number(row.remaining).toFixed(0)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={4}
+                      className="h-28 text-center text-sm text-zinc-400"
                     >
-                      {payrun.status}
-                    </Badge>
+                      No leave allocations in scope.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <PanelHeader
+            title="Department overview"
+            source="Employee + contract + payslip totals"
+          />
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Department</TableHead>
+                  <TableHead className="text-right">Headcount</TableHead>
+                  <TableHead className="text-right">Net salary</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  [0, 1, 2].map((row) => (
+                    <TableRow key={row}>
+                      <TableCell colSpan={3}>
+                        <Skeleton className="h-3 w-full rounded" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (data?.departmentCosts ?? []).length > 0 ? (
+                  data!.departmentCosts.map((row) => (
+                    <TableRow key={row.departmentId}>
+                      <TableCell className="font-medium text-zinc-900">
+                        {row.department}
+                      </TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">
+                        {row.headcount}
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-semibold tabular-nums text-zinc-900">
+                        {compactINR(Number(row.netPay))}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={3}
+                      className="h-28 text-center text-sm text-zinc-400"
+                    >
+                      No departments yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ---------- Recent payruns ---------- */}
+      <Card>
+        <PanelHeader
+          title="Recent payruns"
+          source="Payruns + payslip totals"
+          aside={
+            <Link
+              href="/payroll/payruns"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-harbor-700 hover:text-harbor-900"
+            >
+              View all
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          }
+        />
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Payrun</TableHead>
+                <TableHead>Period</TableHead>
+                <TableHead className="text-right">Payslips</TableHead>
+                <TableHead className="text-right">Net total</TableHead>
+                <TableHead className="text-right">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                [0, 1, 2].map((row) => (
+                  <TableRow key={row}>
+                    <TableCell colSpan={5}>
+                      <Skeleton className="h-3.5 w-full rounded" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (data?.recentPayruns ?? []).length > 0 ? (
+                data!.recentPayruns.map((payrun) => (
+                  <TableRow key={payrun.id}>
+                    <TableCell>
+                      <Link
+                        href={`/payroll/payruns/${payrun.id}`}
+                        className="font-medium text-zinc-900 hover:text-harbor-700 hover:underline"
+                      >
+                        {payrun.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-zinc-500">
+                      {payrun.periodStart} → {payrun.periodEnd}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {payrun.payslipCount}
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-semibold tabular-nums text-zinc-900">
+                      {compactINR(Number(payrun.totalNet))}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={payrun.status === "paid" ? "active" : "running"}>
+                        {formatStatus(payrun.status)}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="h-28 text-center text-sm text-zinc-400"
+                  >
+                    No payruns created yet.
                   </TableCell>
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="py-10 text-center text-xs text-zinc-500"
-                >
-                  No payruns in the selected period.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   )
 }

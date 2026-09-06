@@ -363,7 +363,7 @@ export default function AnomalyDetection() {
         <Dialog open={Boolean(viewingAnomaly)} onOpenChange={() => setViewingAnomaly(null)}>
           <DialogHeader>
             <DialogTitle className="text-black font-bold">
-              Anomaly Review ({viewingAnomaly.id})
+              Anomaly Review
             </DialogTitle>
             <DialogDescription className="text-zinc-500">
               Audit finding details and recommended navigation action.

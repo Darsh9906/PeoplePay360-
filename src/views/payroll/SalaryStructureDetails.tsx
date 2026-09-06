@@ -58,7 +58,7 @@ export default function SalaryStructureDetails({ id }: StructureDetailsProps) {
           Back to Structures
         </Link>
         <span>/</span>
-        <span className="text-black font-semibold">{structure.id}</span>
+        <span className="text-black font-semibold">{structure.name}</span>
       </div>
 
       {/* Page Header */}
@@ -148,9 +148,6 @@ export default function SalaryStructureDetails({ id }: StructureDetailsProps) {
                     <TableCell className="font-semibold text-black">
                       <div>
                         {rule.name}
-                        <div className="text-xs text-zinc-500 font-mono font-normal">
-                          {rule.id}
-                        </div>
                       </div>
                     </TableCell>
 

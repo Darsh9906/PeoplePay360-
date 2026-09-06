@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
+import AuthSplit from "@/src/components/auth/AuthSplit"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/src/context/AuthContext"
 import { defaultPathForRole } from "@/src/lib/rbac"
@@ -37,10 +36,7 @@ export default function Login() {
 
     setIsSubmitting(true)
     try {
-      const loggedInUser = await login({
-        email: email.trim(),
-        password,
-      })
+      const loggedInUser = await login({ email: email.trim(), password })
       // A temporary password is only good for reaching the change screen.
       router.push(
         loggedInUser.mustChangePassword
@@ -54,99 +50,85 @@ export default function Login() {
     }
   }
 
+  const busy = isSubmitting || isLoading
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-zinc-300 bg-black text-lg font-bold text-white">
-            P
-          </div>
-          <p className="text-sm font-semibold tracking-wide text-black">PeoplePay360</p>
-          <p className="mt-1 text-xs text-zinc-500">HR &amp; Payroll</p>
-        </div>
-
-        <Card className="border-zinc-300 bg-white text-black shadow-xl shadow-zinc-200/60">
-          <CardHeader className="space-y-2 border-b border-zinc-200 p-6">
-            <h1 className="text-xl font-semibold tracking-tight text-black">Welcome back</h1>
-            <p className="text-sm text-zinc-500">Sign in to access your HR operations workspace.</p>
-          </CardHeader>
-          <CardContent className="p-6">
-            <form className="space-y-5" onSubmit={handleSubmit}>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-zinc-700" htmlFor="work-email">
-                  Work Email
-                </label>
-                <div className="relative">
-                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                  <Input
-                    id="work-email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@company.com"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    className="border-zinc-300 bg-white pl-10 text-black placeholder:text-zinc-400 focus-visible:ring-black"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-zinc-700" htmlFor="password">
-                    Password
-                  </label>
-                  <span
-                    className="text-xs text-zinc-400"
-                    title="Ask your workspace administrator to reset it"
-                  >
-                    Forgot? Ask your admin
-                  </span>
-                </div>
-                <div className="relative">
-                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    className="border-zinc-300 bg-white px-10 text-black placeholder:text-zinc-400 focus-visible:ring-black"
-                  />
-                  <button
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 transition hover:text-black"
-                    type="button"
-                    onClick={() => setShowPassword((visible) => !visible)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {error && <p className="rounded-md border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-700">{error}</p>}
-
-              <Button className="h-10 w-full bg-black text-white hover:bg-zinc-800" disabled={isSubmitting || isLoading} type="submit">
-                {isSubmitting || isLoading ? "Signing in..." : "Sign In"}
-                {!isSubmitting && !isLoading && <ArrowRight className="h-4 w-4" />}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <p className="mt-6 text-center text-xs text-zinc-500">
+    <AuthSplit
+      title="Welcome back"
+      subtitle="Sign in to your HR operations workspace"
+      footer={
+        <>
           New company?{" "}
-          <Link href="/signup" className="font-semibold text-black hover:underline">
+          <Link href="/signup" className="font-semibold text-harbor-800 hover:underline">
             Create a workspace
           </Link>
-        </p>
+        </>
+      }
+    >
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        <div className="space-y-2">
+          <label className="text-[13px] font-medium text-zinc-800" htmlFor="work-email">
+            Email
+          </label>
+          <Input
+            id="work-email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@company.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            className="h-11"
+          />
+        </div>
 
-        <p className="mt-4 text-center text-xs text-zinc-500">
-          <Link href="/" className="transition hover:text-black">
-            Back to home
-          </Link>
-        </p>
-      </div>
-    </main>
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <label className="text-[13px] font-medium text-zinc-800" htmlFor="password">
+              Password
+            </label>
+            <span
+              className="text-[13px] text-zinc-400"
+              title="Ask your workspace administrator to reset it"
+            >
+              Forgot? Ask your admin
+            </span>
+          </div>
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="h-11 pr-11"
+            />
+            <button
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-zinc-400 transition-colors hover:text-harbor-700"
+              type="button"
+              onClick={() => setShowPassword((visible) => !visible)}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        {error && (
+          <p className="rounded-xl border border-danger/20 bg-danger-soft px-3 py-2.5 text-xs font-medium text-danger">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={busy}
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-harbor-900 to-harbor-600 text-sm font-semibold text-white shadow-[0_10px_24px_-12px_rgba(22,69,106,0.95)] transition-all hover:brightness-110 active:translate-y-px disabled:pointer-events-none disabled:opacity-60"
+        >
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+    </AuthSplit>
   )
 }

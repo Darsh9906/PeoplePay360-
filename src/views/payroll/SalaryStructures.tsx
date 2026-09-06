@@ -212,9 +212,6 @@ export default function SalaryStructures() {
                   <TableCell className="font-semibold text-black">
                     <div>
                       {s.name}
-                      <div className="text-xs text-zinc-500 font-mono font-normal">
-                        {s.id}
-                      </div>
                     </div>
                   </TableCell>
 

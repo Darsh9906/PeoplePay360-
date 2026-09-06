@@ -4,8 +4,8 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Loader2 } from "lucide-react"
+import AuthSplit from "@/src/components/auth/AuthSplit"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { apiRequest } from "@/src/lib/api"
@@ -36,6 +36,34 @@ const emptyForm = {
   confirmPassword: "",
   companySize: companySizes[1],
   industry: industries[0],
+}
+
+function Field({
+  label,
+  htmlFor,
+  error,
+  hint,
+  children,
+}: {
+  label: string
+  htmlFor: string
+  error?: string
+  hint?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[13px] font-medium text-zinc-800" htmlFor={htmlFor}>
+        {label}
+      </label>
+      {children}
+      {error ? (
+        <p className="text-[11px] font-medium text-danger">{error}</p>
+      ) : hint ? (
+        <p className="text-[11px] leading-relaxed text-zinc-500">{hint}</p>
+      ) : null}
+    </div>
+  )
 }
 
 export default function Signup() {
@@ -110,192 +138,152 @@ export default function Signup() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-50 px-6 py-12">
-      <div className="mx-auto w-full max-w-lg">
-        <Link
-          href="/"
-          className="mb-6 inline-flex items-center gap-1.5 text-xs text-zinc-600 transition hover:text-black"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back
-        </Link>
+    <AuthSplit
+      title="Get started"
+      subtitle="Let's create your company workspace"
+      footer={
+        <>
+          Already have an account?{" "}
+          <Link href="/login" className="font-semibold text-harbor-800 hover:underline">
+            Log in
+          </Link>
+        </>
+      }
+    >
+      <form className="space-y-3.5" onSubmit={submit}>
+        <Field label="Company name" htmlFor="companyName" error={errors.companyName}>
+          <Input
+            className="h-11"
+            id="companyName"
+            value={form.companyName}
+            onChange={(event) => update("companyName", event.target.value)}
+            placeholder="Acme Manufacturing Pvt Ltd"
+            autoComplete="organization"
+            aria-invalid={Boolean(errors.companyName) || undefined}
+          />
+        </Field>
 
-        <div className="rounded-xl border border-zinc-300 bg-white p-8 shadow-sm">
-          <h1 className="text-2xl font-bold tracking-tight text-black">
-            Create your workspace
-          </h1>
-          <p className="mt-1.5 text-sm text-zinc-600">
-            Sign up with your company email. You become the administrator and can
-            add your team afterwards.
-          </p>
-
-          <form className="mt-7 space-y-4" onSubmit={submit}>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-black" htmlFor="companyName">
-                Company name
-              </label>
-              <Input
-                id="companyName"
-                value={form.companyName}
-                onChange={(event) => update("companyName", event.target.value)}
-                placeholder="Acme Manufacturing Pvt Ltd"
-                autoComplete="organization"
-              />
-              {errors.companyName && (
-                <p className="text-[11px] font-medium text-black">{errors.companyName}</p>
-              )}
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-black" htmlFor="companySize">
-                  Company size
-                </label>
-                <Select
-                  id="companySize"
-                  value={form.companySize}
-                  onChange={(event) => update("companySize", event.target.value)}
-                >
-                  {companySizes.map((size) => (
-                    <option key={size} value={size}>
-                      {size} employees
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-black" htmlFor="industry">
-                  Industry
-                </label>
-                <Select
-                  id="industry"
-                  value={form.industry}
-                  onChange={(event) => update("industry", event.target.value)}
-                >
-                  {industries.map((industry) => (
-                    <option key={industry} value={industry}>
-                      {industry}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-
-            <div className="h-px bg-zinc-200" />
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-black" htmlFor="fullName">
-                Your full name
-              </label>
-              <Input
-                id="fullName"
-                value={form.fullName}
-                onChange={(event) => update("fullName", event.target.value)}
-                placeholder="Riya Shah"
-                autoComplete="name"
-              />
-              {errors.fullName && (
-                <p className="text-[11px] font-medium text-black">{errors.fullName}</p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-black" htmlFor="workEmail">
-                Work email
-              </label>
-              <Input
-                id="workEmail"
-                type="email"
-                value={form.workEmail}
-                onChange={(event) => update("workEmail", event.target.value)}
-                placeholder="riya@acme.com"
-                autoComplete="email"
-              />
-              {errors.workEmail ? (
-                <p className="text-[11px] font-medium text-black">{errors.workEmail}</p>
-              ) : existingWorkspace ? (
-                <p className="text-[11px] font-medium text-black">
-                  {existingWorkspace.name} already has a workspace for {domain}.{" "}
-                  <Link href="/login" className="underline">
-                    Sign in instead
-                  </Link>
-                  , or ask your administrator to add you.
-                </p>
-              ) : (
-                <p className="text-[11px] text-zinc-500">
-                  Use your company domain — personal addresses are not accepted.
-                </p>
-              )}
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-black" htmlFor="password">
-                  Password
-                </label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={form.password}
-                  onChange={(event) => update("password", event.target.value)}
-                  autoComplete="new-password"
-                />
-                {errors.password && (
-                  <p className="text-[11px] font-medium text-black">{errors.password}</p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <label
-                  className="text-xs font-semibold text-black"
-                  htmlFor="confirmPassword"
-                >
-                  Confirm password
-                </label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={form.confirmPassword}
-                  onChange={(event) => update("confirmPassword", event.target.value)}
-                  autoComplete="new-password"
-                />
-                {errors.confirmPassword && (
-                  <p className="text-[11px] font-medium text-black">
-                    {errors.confirmPassword}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {serverError && (
-              <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs font-medium text-black">
-                {serverError}
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={signupMutation.isPending}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Company size" htmlFor="companySize">
+            <Select
+              className="h-11"
+              id="companySize"
+              value={form.companySize}
+              onChange={(event) => update("companySize", event.target.value)}
             >
-              {signupMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating workspace...
-                </>
-              ) : (
-                "Create workspace"
-              )}
-            </Button>
-          </form>
+              {companySizes.map((size) => (
+                <option key={size} value={size}>
+                  {size} employees
+                </option>
+              ))}
+            </Select>
+          </Field>
 
-          <p className="mt-5 text-center text-xs text-zinc-500">
-            Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-black hover:underline">
-              Sign in
-            </Link>
-          </p>
+          <Field label="Industry" htmlFor="industry">
+            <Select
+              className="h-11"
+              id="industry"
+              value={form.industry}
+              onChange={(event) => update("industry", event.target.value)}
+            >
+              {industries.map((industry) => (
+                <option key={industry} value={industry}>
+                  {industry}
+                </option>
+              ))}
+            </Select>
+          </Field>
         </div>
-      </div>
-    </main>
+
+        <div className="h-px bg-zinc-100" />
+
+        <Field label="Your full name" htmlFor="fullName" error={errors.fullName}>
+          <Input
+            className="h-11"
+            id="fullName"
+            value={form.fullName}
+            onChange={(event) => update("fullName", event.target.value)}
+            placeholder="Riya Shah"
+            autoComplete="name"
+            aria-invalid={Boolean(errors.fullName) || undefined}
+          />
+        </Field>
+
+        <Field
+          label="Work email"
+          htmlFor="workEmail"
+          error={errors.workEmail}
+          hint={
+            existingWorkspace ? (
+              <span className="text-warning">
+                {existingWorkspace.name} already has a workspace for {domain}.{" "}
+                <Link href="/login" className="font-semibold underline">
+                  Sign in instead
+                </Link>
+                , or ask your administrator to add you.
+              </span>
+            ) : (
+              "Use your company domain — personal addresses are not accepted."
+            )
+          }
+        >
+          <Input
+            className="h-11"
+            id="workEmail"
+            type="email"
+            value={form.workEmail}
+            onChange={(event) => update("workEmail", event.target.value)}
+            placeholder="riya@acme.com"
+            autoComplete="email"
+            aria-invalid={Boolean(errors.workEmail) || undefined}
+          />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Password" htmlFor="password" error={errors.password}>
+            <Input
+              className="h-11"
+              id="password"
+              type="password"
+              value={form.password}
+              onChange={(event) => update("password", event.target.value)}
+              autoComplete="new-password"
+              aria-invalid={Boolean(errors.password) || undefined}
+            />
+          </Field>
+
+          <Field
+            label="Confirm password"
+            htmlFor="confirmPassword"
+            error={errors.confirmPassword}
+          >
+            <Input
+              className="h-11"
+              id="confirmPassword"
+              type="password"
+              value={form.confirmPassword}
+              onChange={(event) => update("confirmPassword", event.target.value)}
+              autoComplete="new-password"
+              aria-invalid={Boolean(errors.confirmPassword) || undefined}
+            />
+          </Field>
+        </div>
+
+        {serverError && (
+          <p className="rounded-xl border border-danger/20 bg-danger-soft px-3 py-2.5 text-xs font-medium text-danger">
+            {serverError}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={signupMutation.isPending}
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-harbor-900 to-harbor-600 text-sm font-semibold text-white shadow-[0_10px_24px_-12px_rgba(22,69,106,0.95)] transition-all hover:brightness-110 active:translate-y-px disabled:pointer-events-none disabled:opacity-60"
+        >
+          {signupMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {signupMutation.isPending ? "Creating workspace…" : "Sign up"}
+        </button>
+      </form>
+    </AuthSplit>
   )
 }

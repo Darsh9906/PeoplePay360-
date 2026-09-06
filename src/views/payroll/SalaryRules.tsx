@@ -262,9 +262,6 @@ export default function SalaryRules() {
                   <TableCell className="font-semibold text-black">
                     <div>
                       {rule.name}
-                      <div className="text-xs text-zinc-500 font-mono font-normal">
-                        {rule.id}
-                      </div>
                     </div>
                   </TableCell>
 

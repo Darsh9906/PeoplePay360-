@@ -12,6 +12,7 @@ import {
   isPublicPath,
   labelForRole,
 } from "@/src/lib/rbac"
+import { Lock } from "lucide-react"
 import Navbar from "./Navbar"
 import Sidebar from "./Sidebar"
 
@@ -20,9 +21,45 @@ const authPages = ["/login", "/signup"]
 
 function FullPage({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-50 text-sm font-medium text-zinc-600">
-      {children}
+    <main className="app-canvas flex min-h-screen items-center justify-center text-sm font-medium text-zinc-500">
+      <span className="flex items-center gap-2.5">
+        <span className="h-2 w-2 animate-ping rounded-full bg-harbor-400" />
+        {children}
+      </span>
     </main>
+  )
+}
+
+/** Sidebar + navbar + canvas. Both the normal and access-denied pages use it. */
+function Shell({
+  children,
+  sidebarOpen,
+  onDismiss,
+}: {
+  children: React.ReactNode
+  sidebarOpen: boolean
+  onDismiss: () => void
+}) {
+  return (
+    <div className="flex min-h-screen flex-col bg-white text-foreground">
+      <Sidebar />
+      {/* Below lg the sidebar overlays the page, so it needs a scrim. */}
+      {sidebarOpen && (
+        <div
+          onClick={onDismiss}
+          className="fixed inset-0 z-30 bg-zinc-950/25 backdrop-blur-[2px] lg:hidden"
+          aria-hidden
+        />
+      )}
+      <Navbar />
+      <main
+        className={`app-canvas flex-1 p-4 transition-all duration-300 sm:p-6 lg:p-8 ${
+          sidebarOpen ? "lg:ml-64" : "lg:ml-20"
+        }`}
+      >
+        <div className="mx-auto max-w-7xl">{children}</div>
+      </main>
+    </div>
   )
 }
 
@@ -97,45 +134,32 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   }
 
   const shell = (
-    <div className="flex min-h-screen flex-col bg-white text-foreground">
-      <Sidebar />
-      <Navbar />
-      <main
-        className={`flex-1 bg-zinc-50 p-4 transition-all duration-300 sm:p-6 ${
-          sidebarOpen ? "lg:ml-64" : "lg:ml-20"
-        }`}
-      >
-        <div className="mx-auto max-w-7xl">{children}</div>
-      </main>
-    </div>
+    <Shell sidebarOpen={sidebarOpen} onDismiss={() => app?.setSidebarOpen?.(false)}>
+      {children}
+    </Shell>
   )
 
   if (!canAccessPath(pathname, user?.role)) {
     return (
-      <div className="flex min-h-screen flex-col bg-white text-foreground">
-        <Sidebar />
-        <Navbar />
-        <main
-          className={`flex-1 bg-zinc-50 p-4 transition-all duration-300 sm:p-6 ${
-            sidebarOpen ? "lg:ml-64" : "lg:ml-20"
-          }`}
-        >
-          <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-3xl items-center justify-center">
-            <div className="rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Access restricted
-              </p>
-              <h1 className="mt-2 text-xl font-semibold text-black">
-                This page is not available for {labelForRole(user?.role)}
-              </h1>
-              <p className="mt-2 text-sm text-zinc-500">
-                Use the modules in the sidebar, or ask an administrator to change
-                your role.
-              </p>
-            </div>
+      <Shell sidebarOpen={sidebarOpen} onDismiss={() => app?.setSidebarOpen?.(false)}>
+        <div className="flex min-h-[calc(100vh-9rem)] items-center justify-center">
+          <div className="max-w-md rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-card">
+            <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-warning-soft text-warning">
+              <Lock className="h-5 w-5" />
+            </span>
+            <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+              Access restricted
+            </p>
+            <h1 className="mt-2 font-display text-xl font-semibold tracking-tight text-zinc-900">
+              Not available for {labelForRole(user?.role)}
+            </h1>
+            <p className="mt-2.5 text-sm leading-relaxed text-zinc-500">
+              Use the modules in the sidebar, or ask an administrator to change
+              your role.
+            </p>
           </div>
-        </main>
-      </div>
+        </div>
+      </Shell>
     )
   }
 

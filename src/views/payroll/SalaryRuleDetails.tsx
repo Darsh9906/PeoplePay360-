@@ -45,7 +45,7 @@ export default function SalaryRuleDetails({ id }: RuleDetailsProps) {
           Back to Salary Rules
         </Link>
         <span>/</span>
-        <span className="text-black font-semibold">{rule.id}</span>
+        <span className="text-black font-semibold">{rule.name}</span>
       </div>
 
       {/* Page Header */}

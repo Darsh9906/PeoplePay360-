@@ -1,6 +1,12 @@
 "use client"
 
-import React, { createContext, useContext, useState } from "react"
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react"
 
 interface AppContextType {
   sidebarOpen: boolean
@@ -9,14 +15,39 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null)
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+const mobileQuery = "(max-width: 1023px)"
 
-  return (
-    <AppContext.Provider value={{ sidebarOpen, setSidebarOpen }}>
-      {children}
-    </AppContext.Provider>
+function subscribe(onChange: () => void) {
+  const list = window.matchMedia(mobileQuery)
+  list.addEventListener("change", onChange)
+  return () => list.removeEventListener("change", onChange)
+}
+
+/** Server renders the desktop layout, so the snapshot there is "not mobile". */
+function useIsMobile() {
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(mobileQuery).matches,
+    () => false,
   )
+}
+
+export function AppProvider({ children }: { children: React.ReactNode }) {
+  // Below lg the sidebar overlays the page, so it keeps its own closed-by-
+  // default state rather than inheriting the desktop preference.
+  const isMobile = useIsMobile()
+  const [desktopOpen, setDesktopOpen] = useState(true)
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  const value = useMemo(
+    () => ({
+      sidebarOpen: isMobile ? mobileOpen : desktopOpen,
+      setSidebarOpen: isMobile ? setMobileOpen : setDesktopOpen,
+    }),
+    [desktopOpen, isMobile, mobileOpen],
+  )
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
 
 export function useApp() {

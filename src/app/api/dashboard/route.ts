@@ -69,6 +69,7 @@ export async function GET(request: Request) {
           payslipCount: 0,
           averageNetPay: "0",
         },
+        payslipStatus: [],
         headcount: { totalEmployees: 0, activeEmployees: 0 },
         attendance: {
           presentDays: 0,
@@ -106,7 +107,7 @@ export async function GET(request: Request) {
 
     const payslipWhere = [scopeEmployee, ...periodFilters].filter(Boolean);
 
-    const [payroll] = await db
+    const payrollQuery = db
       .select({
         totalNetPay: sql<string>`coalesce(sum(${payslips.netPay}), 0)::text`,
         totalGrossPay: sql<string>`coalesce(sum(${payslips.grossPay}), 0)::text`,
@@ -118,7 +119,17 @@ export async function GET(request: Request) {
       .innerJoin(payruns, eq(payslips.payrunId, payruns.id))
       .where(payslipWhere.length ? and(...payslipWhere) : undefined);
 
-    const [headcount] = await db
+    const payslipStatusQuery = db
+      .select({
+        status: payslips.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(payslips)
+      .innerJoin(payruns, eq(payslips.payrunId, payruns.id))
+      .where(payslipWhere.length ? and(...payslipWhere) : undefined)
+      .groupBy(payslips.status);
+
+    const headcountQuery = db
       .select({
         totalEmployees: sql<number>`count(${employees.id})::int`,
         activeEmployees: sql<number>`count(*) filter (where ${employees.status} = 'active')::int`,
@@ -132,7 +143,7 @@ export async function GET(request: Request) {
       to ? lte(attendanceRecords.attendanceDate, to) : undefined,
     ].filter(Boolean);
 
-    const [attendance] = await db
+    const attendanceQuery = db
       .select({
         presentDays: sql<number>`count(*) filter (where ${attendanceRecords.status} = 'present')::int`,
         lateDays: sql<number>`count(*) filter (where ${attendanceRecords.status} = 'late')::int`,
@@ -145,19 +156,13 @@ export async function GET(request: Request) {
       .from(attendanceRecords)
       .where(attendanceWhere.length ? and(...attendanceWhere) : undefined);
 
-    // Share of records that are a clean, on-time, fully checked-out day.
-    const attendanceHealth =
-      attendance.totalRecords > 0
-        ? Math.round((attendance.presentDays / attendance.totalRecords) * 100)
-        : 0;
-
     const timeOffWhere = [
       isFiltered ? inArray(timeOffRequests.employeeId, employeeIds) : undefined,
       from ? gte(timeOffRequests.endDate, from) : undefined,
       to ? lte(timeOffRequests.startDate, to) : undefined,
     ].filter(Boolean);
 
-    const [timeOff] = await db
+    const timeOffQuery = db
       .select({
         approved: sql<number>`count(*) filter (where ${timeOffRequests.status} = 'approved')::int`,
         pending: sql<number>`count(*) filter (where ${timeOffRequests.status} = 'submitted')::int`,
@@ -167,7 +172,7 @@ export async function GET(request: Request) {
       .from(timeOffRequests)
       .where(timeOffWhere.length ? and(...timeOffWhere) : undefined);
 
-    const leaveBalances = await db
+    const leaveBalancesQuery = db
       .select({
         typeName: timeOffTypes.name,
         colorHex: timeOffTypes.colorHex,
@@ -188,7 +193,7 @@ export async function GET(request: Request) {
       .groupBy(timeOffTypes.name, timeOffTypes.colorHex)
       .orderBy(asc(timeOffTypes.name));
 
-    const warningRows = await db
+    const warningRowsQuery = db
       .select({
         code: payrollWarnings.code,
         count: sql<number>`count(*)::int`,
@@ -197,7 +202,7 @@ export async function GET(request: Request) {
       .groupBy(payrollWarnings.code)
       .orderBy(desc(sql`count(*)`));
 
-    const recentPayruns = await db
+    const recentPayrunsQuery = db
       .select({
         id: payruns.id,
         name: payruns.name,
@@ -221,7 +226,7 @@ export async function GET(request: Request) {
       .limit(6);
 
     // Headcount and salary cost side by side, per department.
-    const departmentCosts = await db
+    const departmentCostsQuery = db
       .select({
         departmentId: departments.id,
         department: departments.name,
@@ -257,7 +262,7 @@ export async function GET(request: Request) {
       );
 
     // Net salary by payroll month, for the trend chart.
-    const monthlyTrend = await db
+    const monthlyTrendQuery = db
       .select({
         month: sql<string>`to_char(${payruns.periodStart}::date, 'YYYY-MM')`,
         netPay: sql<string>`coalesce(sum(${payslips.netPay}), 0)::text`,
@@ -272,7 +277,7 @@ export async function GET(request: Request) {
 
     // ---- Operational alerts ----
 
-    const [missingBank] = await db
+    const missingBankQuery = db
       .select({ count: sql<number>`count(*)::int` })
       .from(employees)
       .where(
@@ -286,7 +291,7 @@ export async function GET(request: Request) {
         ),
       );
 
-    const [noContract] = await db
+    const noContractQuery = db
       .select({ count: sql<number>`count(*)::int` })
       .from(employees)
       .where(
@@ -300,7 +305,7 @@ export async function GET(request: Request) {
         ),
       );
 
-    const [expiringContracts] = await db
+    const expiringContractsQuery = db
       .select({ count: sql<number>`count(*)::int` })
       .from(contracts)
       .where(
@@ -312,9 +317,49 @@ export async function GET(request: Request) {
         ),
       );
 
+    // Each figure above is independent of the others, so they travel to the
+    // database together. Awaited one by one this was twelve serial HTTP round
+    // trips on the Neon driver; as one batch it is a single wait.
+    const [
+      [payroll],
+      payslipStatus,
+      [headcount],
+      [attendance],
+      [timeOff],
+      leaveBalances,
+      warningRows,
+      recentPayruns,
+      departmentCosts,
+      monthlyTrend,
+      [missingBank],
+      [noContract],
+      [expiringContracts],
+    ] = await Promise.all([
+      payrollQuery,
+      payslipStatusQuery,
+      headcountQuery,
+      attendanceQuery,
+      timeOffQuery,
+      leaveBalancesQuery,
+      warningRowsQuery,
+      recentPayrunsQuery,
+      departmentCostsQuery,
+      monthlyTrendQuery,
+      missingBankQuery,
+      noContractQuery,
+      expiringContractsQuery,
+    ]);
+
+    // Share of records that are a clean, on-time, fully checked-out day.
+    const attendanceHealth =
+      attendance.totalRecords > 0
+        ? Math.round((attendance.presentDays / attendance.totalRecords) * 100)
+        : 0;
+
     return ok({
       filters: { from, to, departmentId, employeeType },
       payroll,
+      payslipStatus,
       headcount,
       attendance: { ...attendance, attendanceHealth },
       timeOff,

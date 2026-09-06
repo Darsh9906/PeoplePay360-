@@ -158,9 +158,6 @@ export default function Payslips() {
                         </div>
                         <div>
                           <div className="font-semibold text-black">{ps.employeeName}</div>
-                          <div className="text-xs text-zinc-500 font-mono font-normal">
-                            {ps.employeeId}
-                          </div>
                         </div>
                       </div>
                     </TableCell>
