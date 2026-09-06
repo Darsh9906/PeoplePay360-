@@ -64,7 +64,19 @@ const roles = [
     email: "employee@demo.peoplepay360.test",
     sees: "My Profile, My Attendance, My Time Off only",
   },
+  {
+    role: "employee",
+    name: "Ada Absent",
+    email: "employee2@demo.peoplepay360.test",
+    sees: "Same as above — starts with no attendance today, so check-in can be demonstrated live",
+  },
 ] as const;
+
+/** Logins that must be attached to a real employee record to see anything. */
+const employeeLogins = [
+  { email: "employee@demo.peoplepay360.test", clearToday: false },
+  { email: "employee2@demo.peoplepay360.test", clearToday: true },
+];
 
 type OrgRow = { id: string; name: string; employees: number };
 
@@ -131,29 +143,59 @@ for (const entry of roles) {
  * that is not linked to an employee record sees nothing at all. Link it to a
  * real seeded employee so the self-service pages have something to show.
  */
-const [employeeUser] = (await sql`
-  select id from users where email = ${"employee@demo.peoplepay360.test"} limit 1
-`) as { id: string }[];
+type LinkedRow = {
+  id: string;
+  employee_code: string;
+  first_name: string;
+  last_name: string;
+};
 
-// Drop any previous link, then attach the first active employee.
-await sql`
-  update employees set user_id = null
-  where user_id = ${employeeUser.id}
-`;
+const linkedByEmail = new Map<string, LinkedRow>();
 
-const [linked] = (await sql`
-  update employees
-  set user_id = ${employeeUser.id}
-  where id = (
-    select id from employees
-    where organization_id = ${organization.id}
-      and status = 'active'
-      and user_id is null
-    order by employee_code
-    limit 1
-  )
-  returning employee_code, first_name, last_name
-`) as { employee_code: string; first_name: string; last_name: string }[];
+for (const login of employeeLogins) {
+  const [user] = (await sql`
+    select id from users where email = ${login.email} limit 1
+  `) as { id: string }[];
+
+  // Release any previous link first, so re-running does not accumulate them
+  // and each login ends up on a distinct employee.
+  await sql`update employees set user_id = null where user_id = ${user.id}`;
+
+  const [row] = (await sql`
+    update employees
+    set user_id = ${user.id}
+    where id = (
+      select id from employees
+      where organization_id = ${organization.id}
+        and status = 'active'
+        and user_id is null
+      order by employee_code
+      limit 1
+    )
+    returning id, employee_code, first_name, last_name
+  `) as LinkedRow[];
+
+  if (!row) continue;
+
+  linkedByEmail.set(login.email, row);
+
+  // The navbar shows users.name while My Profile shows the employee record;
+  // different names make one person look like two.
+  await sql`
+    update users set name = ${`${row.first_name} ${row.last_name}`}
+    where id = ${user.id}
+  `;
+
+  // This login exists to demonstrate checking in, so today must start empty —
+  // the API rejects a second entry for the same day.
+  if (login.clearToday) {
+    await sql`
+      delete from attendance_records
+      where employee_id = ${row.id}
+        and attendance_date = current_date
+    `;
+  }
+}
 
 // Read back and verify exactly what the login route checks: the row exists,
 // status is active, and the stored hash validates this password. A silent
@@ -216,51 +258,35 @@ for (const entry of roles) {
   console.log("");
 }
 
-if (linked) {
-  // The navbar shows users.name while My Profile shows the linked employee
-  // record. Leaving them different makes one person look like two, so the
-  // login takes the employee's name.
-  const employeeName = `${linked.first_name} ${linked.last_name}`;
-  await sql`update users set name = ${employeeName} where id = ${employeeUser.id}`;
+for (const login of employeeLogins) {
+  const row = linkedByEmail.get(login.email);
 
-  console.log(
-    `Employee login is linked to ${employeeName} (${linked.employee_code}),\n` +
-      `and the account name now matches it.\n`,
-  );
+  if (!row) {
+    console.log(
+      `Warning: ${login.email} could not be linked to an employee — no unlinked\n` +
+        "active employee was available, so its self-service pages will be empty.\n",
+    );
+    continue;
+  }
 
-  // What that employee can actually show on their self-service pages.
   const [own] = (await sql`
     select
+      (select count(*) from attendance_records a where a.employee_id = ${row.id})::int as attendance,
       (select count(*) from attendance_records a
-        where a.employee_id = e.id)::int as attendance,
-      (select count(*) from leave_allocations l
-        where l.employee_id = e.id)::int as allocations,
-      (select count(*) from time_off_requests t
-        where t.employee_id = e.id)::int as time_off,
-      (select count(*) from payslips p
-        where p.employee_id = e.id)::int as payslips,
-      (select count(*) from contracts c
-        where c.employee_id = e.id)::int as contracts
-    from employees e where e.id = (
-      select id from employees where user_id = ${employeeUser.id} limit 1
-    )
+        where a.employee_id = ${row.id} and a.attendance_date = current_date)::int as today,
+      (select count(*) from leave_allocations l where l.employee_id = ${row.id})::int as allocations,
+      (select count(*) from time_off_requests t where t.employee_id = ${row.id})::int as time_off,
+      (select count(*) from payslips p where p.employee_id = ${row.id})::int as payslips
   `) as Record<string, number>[];
 
-  console.log("That employee's own records:");
-  console.log(`  attendance   ${own.attendance}`);
-  console.log(`  contracts    ${own.contracts}`);
-  console.log(`  allocations  ${own.allocations}`);
-  console.log(`  time off     ${own.time_off}`);
-  console.log(`  payslips     ${own.payslips}`);
-  if (own.attendance === 0) {
-    console.log("\n  Note: this employee has no attendance rows, so My Attendance");
-    console.log("  will be empty until they check in.");
-  }
-  console.log("");
-} else {
+  console.log(`${login.email}`);
+  console.log(`  linked to   ${row.first_name} ${row.last_name} (${row.employee_code})`);
+  console.log(`  attendance  ${own.attendance} record(s), ${own.today} today`);
+  console.log(`  allocations ${own.allocations} · time off ${own.time_off} · payslips ${own.payslips}`);
   console.log(
-    "Warning: no unlinked active employee was available, so the employee login\n" +
-      "has no employee record and its self-service pages will be empty.\n",
+    own.today === 0
+      ? "  ready to check in live\n"
+      : "  already has today's entry, so check-in will be refused\n",
   );
 }
 

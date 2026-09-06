@@ -2,9 +2,27 @@
  * The PeoplePay360 mark: a six-spoke burst whose spokes shorten clockwise —
  * one cycle, closing. Payroll is a circle you run every period.
  */
-export function LogoMark({ className = "h-7 w-7" }: { className?: string }) {
+export function LogoMark({
+  className = "h-7 w-7",
+  /**
+   * Set when the mark stands alone with no adjacent text. Without it the mark
+   * is decorative and hidden from assistive tech, which is right when a
+   * wrapping link or heading already carries the name.
+   */
+  label,
+}: {
+  className?: string
+  label?: string
+}) {
   return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
+    <svg
+      viewBox="0 0 32 32"
+      className={className}
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
+      {label && <title>{label}</title>}
       <g
         stroke="currentColor"
         strokeWidth="3.1"

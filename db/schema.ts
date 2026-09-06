@@ -421,6 +421,16 @@ export const attendanceRecords = pgTable(
       .notNull()
       .default("0.00"),
     status: attendanceStatusEnum("status").notNull().default("present"),
+    /**
+     * Metres from the office when the employee checked in. Distance only —
+     * deliberately not the coordinates, so this is enough to audit a suspect
+     * check-in without accumulating a location history. Null for records not
+     * created by self check-in.
+     */
+    checkInDistanceMeters: numeric("check_in_distance_meters", {
+      precision: 9,
+      scale: 1,
+    }),
   },
   (table) => ({
     employeeDateIdx: uniqueIndex("attendance_employee_date_idx").on(

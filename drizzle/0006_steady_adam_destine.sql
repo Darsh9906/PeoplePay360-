@@ -1,0 +1,1 @@
+ALTER TABLE "attendance_records" ADD COLUMN "check_in_distance_meters" numeric(9, 1);

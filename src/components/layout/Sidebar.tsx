@@ -95,18 +95,15 @@ export default function Sidebar() {
           sidebarOpen ? "justify-between px-4" : "justify-center px-2"
         }`}
       >
-        <div className="flex min-w-0 items-center gap-2.5">
+        {/* Mark only. The workspace name stays reachable as a tooltip so a
+            multi-tenant user can still tell which one they are in. */}
+        <div
+          className="flex min-w-0 items-center"
+          title={user?.organization?.name ?? "PeoplePay360"}
+        >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-harbor-800 text-white">
             <LogoMark className="h-5 w-5" />
           </span>
-          {sidebarOpen && (
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate font-display text-[14px] font-semibold tracking-[-0.02em] text-zinc-900">
-                {user?.organization?.name ?? "PeoplePay360"}
-              </span>
-              <span className="text-[11px] text-zinc-500">HR &amp; Payroll</span>
-            </span>
-          )}
         </div>
         {sidebarOpen && (
           <button

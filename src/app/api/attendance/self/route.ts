@@ -4,6 +4,7 @@ import { attendanceRecords } from "@/db/schema";
 import { getSessionUser } from "../../_lib/auth";
 import { linkedEmployeeId } from "../../_lib/access";
 import { verifyOfficeNetwork } from "../../_lib/network";
+import { verifyOfficeLocation } from "../../_lib/geofence";
 import { writeAuditLog } from "../../_lib/audit";
 import {
   badRequest,
@@ -36,9 +37,16 @@ export async function GET(request: Request) {
 
     const employeeId = await linkedEmployeeId(user.id);
     const network = verifyOfficeNetwork(request);
+    // No coordinates at this point — this only reports whether the geofence is
+    // switched on and how close an employee has to be.
+    const locationProbe = verifyOfficeLocation(null, null);
+    const location = {
+      configured: locationProbe.configured,
+      radiusMeters: locationProbe.radiusMeters,
+    };
 
     if (!employeeId) {
-      return ok({ employeeLinked: false, today: null, network });
+      return ok({ employeeLinked: false, today: null, network, location });
     }
 
     const today = await db.query.attendanceRecords.findFirst({
@@ -48,7 +56,7 @@ export async function GET(request: Request) {
       ),
     });
 
-    return ok({ employeeLinked: true, today: today ?? null, network });
+    return ok({ employeeLinked: true, today: today ?? null, network, location });
   } catch (error) {
     return serverError(error);
   }
@@ -93,6 +101,30 @@ export async function POST(request: Request) {
       );
     }
 
+    // Second gate. The coordinates come from the browser, so unlike the IP they
+    // are client-supplied and spoofable — they are an additional check on top
+    // of the network one, never a replacement for it.
+    const location = verifyOfficeLocation(body?.latitude, body?.longitude);
+
+    if (!location.configured) {
+      return forbidden("Office location verification is not configured.");
+    }
+
+    if (!location.verified) {
+      if (location.reason === "no-coordinates") {
+        return forbidden(
+          "Location is required to check in. Allow location access and try again.",
+        );
+      }
+      if (location.reason === "invalid-coordinates") {
+        return badRequest("The location reported by your device was not valid.");
+      }
+      return forbidden(
+        `You appear to be ${Math.round(location.distanceMeters ?? 0)} m from the office. ` +
+          `Check-in is allowed within ${location.radiusMeters} m.`,
+      );
+    }
+
     const date = todayDateString();
     const existing = await db.query.attendanceRecords.findFirst({
       where: and(
@@ -113,6 +145,9 @@ export async function POST(request: Request) {
           attendanceDate: date,
           checkIn: new Date(),
           status: "present",
+          // Distance only — never the coordinates themselves.
+          checkInDistanceMeters:
+            location.distanceMeters === null ? null : String(location.distanceMeters),
         })
         .returning();
 
@@ -121,8 +156,12 @@ export async function POST(request: Request) {
         action: "create",
         entityType: "attendance_record",
         entityId: record.id,
-        summary: `${user.name} checked in from a verified office network`,
-        metadata: { verifiedIp: network.currentIp, officeName: network.officeName },
+        summary: `${user.name} checked in from a verified office network and location`,
+        metadata: {
+          verifiedIp: network.currentIp,
+          officeName: network.officeName,
+          distanceMeters: location.distanceMeters,
+        },
       });
 
       return created(record);
@@ -153,8 +192,12 @@ export async function POST(request: Request) {
       action: "update",
       entityType: "attendance_record",
       entityId: record.id,
-      summary: `${user.name} checked out from a verified office network`,
-      metadata: { verifiedIp: network.currentIp, officeName: network.officeName },
+      summary: `${user.name} checked out from a verified office network and location`,
+      metadata: {
+        verifiedIp: network.currentIp,
+        officeName: network.officeName,
+        distanceMeters: location.distanceMeters,
+      },
     });
 
     return ok(record);

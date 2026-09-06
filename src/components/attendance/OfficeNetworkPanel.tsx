@@ -8,6 +8,7 @@ import {
   Loader2,
   LogIn,
   LogOut,
+  MapPin,
   RotateCw,
   Wifi,
   WifiOff,
@@ -31,10 +32,55 @@ type TodayRecord = {
   status: "present" | "late" | "absent" | "half_day"
 }
 
+type LocationConfig = {
+  configured: boolean
+  radiusMeters: number | null
+}
+
 type SelfStatus = {
   employeeLinked: boolean
   today: TodayRecord | null
   network: NetworkStatus
+  location: LocationConfig
+}
+
+/**
+ * The browser's own position. Resolves rather than throws so the caller can
+ * turn every failure into a message the employee can act on.
+ */
+function requestPosition(): Promise<
+  | { ok: true; latitude: number; longitude: number; accuracy: number }
+  | { ok: false; message: string }
+> {
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    return Promise.resolve({
+      ok: false,
+      message: "This browser cannot report your location.",
+    })
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        resolve({
+          ok: true,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        }),
+      (error) => {
+        const message =
+          error.code === error.PERMISSION_DENIED
+            ? "Location permission was denied. Allow it in your browser to check in."
+            : error.code === error.POSITION_UNAVAILABLE
+              ? "Your location could not be determined. Check that location services are on."
+              : "Getting your location timed out. Try again."
+        resolve({ ok: false, message })
+      },
+      // A fresh fix matters here, so no cached position.
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
+    )
+  })
 }
 
 function time(value?: string | null) {
@@ -88,6 +134,7 @@ export default function OfficeNetworkPanel() {
   const queryClient = useQueryClient()
   const [devIp, setDevIp] = useState("")
   const [actionError, setActionError] = useState<string | null>(null)
+  const [locating, setLocating] = useState(false)
 
   // Dev-only: `next dev` on localhost sets no forwarding header, so without
   // this the panel could only ever show "unavailable". Stripped from prod.
@@ -106,12 +153,26 @@ export default function OfficeNetworkPanel() {
   })
 
   const action = useMutation({
-    mutationFn: (act: "check-in" | "check-out") =>
-      apiRequest("/api/attendance/self", {
+    mutationFn: async (act: "check-in" | "check-out") => {
+      let coords: { latitude: number; longitude: number } | null = null
+
+      // Only ask for location when the server says the geofence is configured,
+      // so an unconfigured deployment never triggers a permission prompt.
+      if (statusQuery.data?.location?.configured) {
+        setLocating(true)
+        const position = await requestPosition().finally(() => setLocating(false))
+        if (!position.ok) {
+          throw new Error(position.message)
+        }
+        coords = { latitude: position.latitude, longitude: position.longitude }
+      }
+
+      return apiRequest("/api/attendance/self", {
         method: "POST",
-        body: JSON.stringify({ action: act }),
+        body: JSON.stringify({ action: act, ...coords }),
         ...(devHeaders ? { headers: devHeaders } : {}),
-      }),
+      })
+    },
     onMutate: () => setActionError(null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["attendance"] })
@@ -208,6 +269,15 @@ export default function OfficeNetworkPanel() {
           />
         )}
 
+        {status?.employeeLinked && status.location?.configured && (
+          <Line
+            tone="warn"
+            icon={<MapPin className="h-4 w-4" />}
+            title="Location is also checked"
+            description={`Your device must report a position within ${status.location.radiusMeters} m of the office. You will be asked for location permission when you check in.`}
+          />
+        )}
+
         {network?.currentIp && (
           <p className="flex items-center gap-1.5 font-mono text-[11px] text-zinc-500">
             <Wifi className="h-3 w-3" />
@@ -238,7 +308,11 @@ export default function OfficeNetworkPanel() {
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-harbor-900 to-harbor-600 px-5 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(22,69,106,0.9)] transition hover:brightness-110 disabled:pointer-events-none disabled:opacity-40"
             >
               <LogIn className="h-4 w-4" />
-              {action.isPending ? "Checking in…" : "Check in"}
+              {locating
+                ? "Getting location…"
+                : action.isPending
+                  ? "Checking in…"
+                  : "Check in"}
             </button>
           )}
 
@@ -250,7 +324,11 @@ export default function OfficeNetworkPanel() {
               className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 px-5 text-sm font-semibold text-harbor-800 transition hover:bg-harbor-50 disabled:pointer-events-none disabled:opacity-40"
             >
               <LogOut className="h-4 w-4" />
-              {action.isPending ? "Checking out…" : "Check out"}
+              {locating
+                ? "Getting location…"
+                : action.isPending
+                  ? "Checking out…"
+                  : "Check out"}
             </button>
           )}
 
